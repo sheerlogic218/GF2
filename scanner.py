@@ -51,6 +51,9 @@ class Scanner:
 
     def __init__(self, path: str, names: Names) -> None:
         """Open specified file and initialise reserved words and IDs."""
+        with open(path, "r") as f:
+            self.text = f.read()
+        self.names = names
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
