@@ -1,7 +1,0 @@
-prog def complex : in.a len 1, in.b len 1, in.c len 1 : out.y len 1;
-
-    assign out.y = !(in.a + in.b) * in.c;
-
-    monitor out.y;
-
-end def;
