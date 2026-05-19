@@ -69,6 +69,7 @@ class Names:
                 self.name_IDS[name_string] = id
                 self.inv_name_IDS[id] = name_string
             output.append(self.name_IDS[name_string])
+        return output
 
 
 
