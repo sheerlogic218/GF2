@@ -7,7 +7,7 @@ Classes
 -------
 Names - maps variable names and string names to unique integers.
 """
-
+import uuid
 
 class Names:
 
@@ -37,10 +37,11 @@ class Names:
     get_name_string(self, name_id): Returns the corresponding name string for
                         the name ID. Returns None if the ID is not present.
     """
-
     def __init__(self):
         """Initialise names list."""
         self.error_code_count = 0  # how many error codes have been declared
+        self.name_IDS = {}
+        self.inv_name_IDS = {}
 
     def unique_error_codes(self, num_error_codes):
         """Return a list of unique integer error codes."""
@@ -52,18 +53,29 @@ class Names:
 
     def query(self, name_string):
         """Return the corresponding name ID for name_string.
-
         If the name string is not present in the names list, return None.
         """
+        return self.name_IDS.get(name_string)
 
     def lookup(self, name_string_list):
         """Return a list of name IDs for each name string in name_string_list.
 
         If the name string is not present in the names list, add it.
         """
+        output = []
+        for name_string in name_string_list:
+            if name_string not in self.name_IDS:
+                id = uuid.uuid4()
+                self.name_IDS[name_string] = id
+                self.inv_name_IDS[id] = name_string
+            output.append(self.name_IDS[name_string])
+        return output
+
+
 
     def get_name_string(self, name_id):
         """Return the corresponding name string for name_id.
 
         If the name_id is not an index in the names list, return None.
         """
+        return self.inv_name_IDS.get(name_id)

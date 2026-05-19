@@ -1,0 +1,11 @@
+prog def wire_test : in.a len 4, in.b len 4 : out.y len 4;
+
+    wire carry len 4;
+
+    assign wire.carry = in.a * in.b;
+    assign out.y      = wire.carry + in.a;
+
+    monitor out.y;
+    monitor wire.carry;
+
+end def;

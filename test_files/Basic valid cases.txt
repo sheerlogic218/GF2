@@ -1,0 +1,7 @@
+prog def simple : in.a len 1, in.b len 1 : out.y len 1;
+
+    assign out.y = in.a * in.b;
+
+    monitor out.y;
+
+end def;
