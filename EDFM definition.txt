@@ -2,8 +2,8 @@
 
 program		= prog_defn, {prog_defn} ;
 
-(*prog defn e.g. prog def my_module : input1, input2, input3 : output1, output2 ; … end def;*)
-prog_defn 	    = "prog def", name, ":", list_inputs, ":",  list_outputs, ";", {statement}, "end def" , ";" ;
+(*prog defn e.g. prog def my_module : in.input1, in.input2, in.input3 : out.output1, out.output2 ; … end def;*)
+prog_defn 	    = "prog def", name, ":", list_inputs, ":",  list_outputs, ":", ["clk"],  ";", {statement}, "end def" , ";" ;
 list_inputs 	= [input, {",", input} ] ;
 list_outputs	= [output, {",", output} ] ;
 statement 	    = wire_declaration | assignment_declaration | monitor_declaration;
@@ -20,9 +20,9 @@ wire_declaration 		= "wire", name, "len", integer, ";";
 monitor_declaration 	= "monitor", (input_ref|output_ref|wire_ref), ";";
 
 (*gate declarations e.g. assign out_y = !in_x + in_y; option for nonblocking assignments included*)
-assignment_declaration 	= "assign", ["nonblocking"], assign_out, "=", or_gates, ";";
-or_gates 		        = and_gate, {"+", and_gate};
-and_gate 		        = xor_gate, {"*", xor_gate};
+assignment_declaration 	= ["nonblocking"], assign_out, "=", or_gates, ";";
+or_gates 		        = and_gate, {["!"],"+", and_gate};
+and_gate 		        = xor_gate, {["!"], "*", xor_gate};
 xor_gate		        = basic_input, {"^", basic_input};
 basic_input 		    = ["!"], (assign_in | "(", or_gates, ")" );
 
