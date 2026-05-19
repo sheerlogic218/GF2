@@ -1,0 +1,7 @@
+prog def slice_test : in.a len 4 : out.y len 1;
+
+    assign out.y = in.a[0] ^ in.a[3];
+
+    monitor out.y;
+
+end def;

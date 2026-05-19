@@ -1,0 +1,7 @@
+prog def not_test : in.a len 1 : out.y len 1;
+
+    assign out.y = !in.a;
+
+    monitor out.y;
+
+end def;
