@@ -53,7 +53,6 @@ class Names:
 
     def query(self, name_string):
         """Return the corresponding name ID for name_string.
-        return [self.name_IDS.get(name_string) for name_string in name_string_list]
         If the name string is not present in the names list, return None.
         """
         return self.name_IDS.get(name_string)
