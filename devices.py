@@ -9,7 +9,8 @@ Device - stores device properties.
 Devices - makes and stores all the devices in the logic network.
 """
 import random
-
+from uuid import UUID
+from names import Names
 
 class Device:
 
@@ -97,17 +98,18 @@ class Devices:
                        the specified device and returns errors if unsuccessful.
     """
 
-    def __init__(self, names):
+    def __init__(self, names: Names):
         """Initialise devices list and constants."""
 
-        self.names = names
+        self.names:Names = names
 
-        self.devices_list = []
+        self.devices_list: list  = []
+        self.devices_list: dict[UUID, Device]= {}
 
-        gate_strings = ["AND", "OR", "NAND", "NOR", "XOR"]
-        device_strings = ["CLOCK", "SWITCH", "DTYPE"]
-        dtype_inputs = ["CLK", "SET", "CLEAR", "DATA"]
-        dtype_outputs = ["Q", "QBAR"]
+        gate_strings: list[str] = ["AND", "OR", "NAND", "NOR", "XOR"]
+        device_strings: list[str] = ["CLOCK", "SWITCH", "DTYPE"]
+        dtype_inputs: list[str] = ["CLK", "SET", "CLEAR", "DATA"]
+        dtype_outputs: list[str] = ["Q", "QBAR"]
 
         [self.NO_ERROR, self.INVALID_QUALIFIER, self.NO_QUALIFIER,
          self.BAD_DEVICE, self.QUALIFIER_PRESENT,
@@ -124,10 +126,11 @@ class Devices:
         self.dtype_output_ids = [
             self.Q_ID, self.QBAR_ID] = self.names.lookup(dtype_outputs)
 
-        self.max_gate_inputs = 16
+        self.max_gate_inputs: int = 16
 
     def get_device(self, device_id):
         """Return the Device object corresponding to device_id."""
+        ###CHANGE
         for device in self.devices_list:
             if device.device_id == device_id:
                 return device
@@ -241,7 +244,7 @@ class Devices:
         device.clock_half_period = clock_half_period
         self.cold_startup()  # clock initialised to a random point in its cycle
 
-    def make_gate(self, device_id, device_kind, no_of_inputs):
+    def make_gate(self, device_id, device_kind, no_of_inputs:int):
         """Make logic gates with the specified number of inputs."""
         self.add_device(device_id, device_kind)
         self.add_output(device_id, output_id=None)
