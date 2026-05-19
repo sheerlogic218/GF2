@@ -7,10 +7,11 @@ Classes
 -------
 Names - maps variable names and string names to unique integers.
 """
+
 import uuid
 
-class Names:
 
+class Names:
     """Map variable names and string names to unique integers.
 
     This class deals with storing grammatical keywords and user-defined words,
@@ -37,6 +38,7 @@ class Names:
     get_name_string(self, name_id): Returns the corresponding name string for
                         the name ID. Returns None if the ID is not present.
     """
+
     def __init__(self):
         """Initialise names list."""
         self.error_code_count = 0  # how many error codes have been declared
@@ -48,8 +50,7 @@ class Names:
         if not isinstance(num_error_codes, int):
             raise TypeError("Expected num_error_codes to be an integer.")
         self.error_code_count += num_error_codes
-        return range(self.error_code_count - num_error_codes,
-                     self.error_code_count)
+        return range(self.error_code_count - num_error_codes, self.error_code_count)
 
     def query(self, name_string):
         """Return the corresponding name ID for name_string.
@@ -70,8 +71,6 @@ class Names:
                 self.inv_name_IDS[id] = name_string
             output.append(self.name_IDS[name_string])
         return output
-
-
 
     def get_name_string(self, name_id):
         """Return the corresponding name string for name_id.
