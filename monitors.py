@@ -79,8 +79,8 @@ class Monitors:
             # of BLANK signals. Otherwise, initialise the trace with an empty
             # list.
             self.monitors_dictionary[(device_id, output_id)] = [
-                                                                   self.devices.BLANK
-                                                               ] * cycles_completed
+                self.devices.BLANK
+            ] * cycles_completed
             return self.NO_ERROR
 
     def remove_monitor(self, device_id, output_id):
