@@ -62,7 +62,7 @@ class Monitors:
         )
 
     def make_monitor(self, device_id, output_id, cycles_completed=0):
-        """Add the specified signal to the monitors dictionary.
+        """Add the specified signal to monitors_dictionary.
 
         Return NO_ERROR if successful, or the corresponding error if not.
         """
@@ -79,12 +79,12 @@ class Monitors:
             # of BLANK signals. Otherwise, initialise the trace with an empty
             # list.
             self.monitors_dictionary[(device_id, output_id)] = [
-                                                                   self.devices.BLANK
-                                                               ] * cycles_completed
+                self.devices.BLANK
+            ] * cycles_completed
             return self.NO_ERROR
 
     def remove_monitor(self, device_id, output_id):
-        """Remove the specified signal from the monitors dictionary.
+        """Remove the specified signal from monitors_dictionary.
 
         Return True if successful.
         """
@@ -99,19 +99,15 @@ class Monitors:
 
         If the monitor does not exist, return None.
         """
-        if (device_id, output_id) in self.monitors_dictionary:
-            return self.network.get_output_signal(device_id, output_id)
-        else:
-            return None
+        return self.network.get_output_signal(device_id, output_id)
 
     def record_signals(self):
         """Record the current signal level for every monitor.
 
         This function is called at every simulation cycle.
         """
-        for device_id, output_id in self.monitors_dictionary:
-            signal_level = self.get_monitor_signal(device_id, output_id)
-            self.monitors_dictionary[(device_id, output_id)].append(signal_level)
+        for k, v in self.monitors_dictionary.items():
+            v += [self.get_monitor_signal(*k)]
 
     def get_signal_names(self):
         """Return two signal name lists: monitored and not monitored."""

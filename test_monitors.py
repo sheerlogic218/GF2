@@ -73,8 +73,9 @@ def test_remove_monitor(new_monitors):
     names = new_monitors.names
     [SW1_ID, SW2_ID, OR1_ID] = names.lookup(["Sw1", "Sw2", "Or1"])
 
-    new_monitors.remove_monitor(SW1_ID, None)
+    worked = new_monitors.remove_monitor(SW1_ID, None)
     assert new_monitors.monitors_dictionary == {(SW2_ID, None): [], (OR1_ID, None): []}
+    assert worked == True
 
 
 def test_get_signal_names(new_monitors):

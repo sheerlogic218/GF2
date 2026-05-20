@@ -72,11 +72,11 @@ class UserInterface:
         self.monitors = monitors
         self.network = network
 
-        self.cycles_completed = 0  # number of simulation cycles completed
+        self.cycles_completed: int = 0  # number of simulation cycles completed
 
-        self.character = ""  # current character
-        self.line = ""  # current string entered by the user
-        self.cursor = 0  # cursor position
+        self.character: str = ""  # current character
+        self.line: str = ""  # current string entered by the user
+        self.cursor: int = 0  # cursor position
 
     def command_interface(self):
         """Read the command entered and call the corresponding function."""
@@ -87,20 +87,21 @@ class UserInterface:
         self.get_line()  # get the user entry
         command = self.read_command()  # read the first character
         while command != "q":
-            if command == "h":
-                self.help_command()
-            elif command == "s":
-                self.switch_command()
-            elif command == "m":
-                self.monitor_command()
-            elif command == "z":
-                self.zap_command()
-            elif command == "r":
-                self.run_command()
-            elif command == "c":
-                self.continue_command()
-            else:
-                print("Invalid command. Enter 'h' for help.")
+            match command:
+                case "h":
+                    self.help_command()
+                case "s":
+                    self.switch_command()
+                case "m":
+                    self.monitor_command()
+                case "z":
+                    self.zap_command()
+                case "r":
+                    self.run_command()
+                case "c":
+                    self.continue_command()
+                case _:
+                    print("Invalid command. Enter 'h' for help.")
             self.get_line()  # get the user entry
             command = self.read_command()  # read the first character
 
