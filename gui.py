@@ -279,16 +279,34 @@ class Gui(wx.Frame):
         self.canvas = MyGLCanvas(self, devices, monitors)
 
         # Configure the widgets
-        self.text = wx.StaticText(self, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self, wx.ID_ANY, "10")
+        self.cycles_label = wx.StaticText(self, wx.ID_ANY, "Cycles")
+        self.spin = wx.SpinCtrl(self, wx.ID_ANY, "10", min=1, max=1000)
         self.run_button = wx.Button(self, wx.ID_ANY, "Run")
-        self.text_box = wx.TextCtrl(self, wx.ID_ANY, "", style=wx.TE_PROCESS_ENTER)
+        self.continue_button = wx.Button(self, wx.ID_ANY, "Continue")
 
-        # Bind events to widgets
+        self.switch_label = wx.StaticText(self, wx.ID_ANY, "Select switch:")
+        self.switch_choice = wx.Choice(self, wx.ID_ANY, 
+                               choices=["SW1", "SW2", "SW3"])
+        self.switch_on = wx.Button(self, wx.ID_ANY, "Set ON")
+        self.switch_off = wx.Button(self, wx.ID_ANY, "Set OFF")
+
+        self.monitors_label = wx.StaticText(self, wx.ID_ANY, "Monitors:")
+        self.monitors_list = wx.ListBox(self, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
+        self.add_monitor_btn = wx.Button(self, wx.ID_ANY, "Add Monitor")
+        self.remove_monitor_btn = wx.Button(self, wx.ID_ANY, "Remove Monitor")
+
+
+        #bind events to the widgets
         self.Bind(wx.EVT_MENU, self.on_menu)
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
-        self.text_box.Bind(wx.EVT_TEXT_ENTER, self.on_text_box)
+        self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
+
+        self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
+        self.switch_off.Bind(wx.EVT_BUTTON, self.on_switch_off)
+
+        self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
+        self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
 
         # Configure sizers for layout
         main_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -297,13 +315,47 @@ class Gui(wx.Frame):
         main_sizer.Add(self.canvas, 5, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(side_sizer, 1, wx.ALL, 5)
 
-        side_sizer.Add(self.text, 1, wx.TOP, 10)
-        side_sizer.Add(self.spin, 1, wx.ALL, 5)
-        side_sizer.Add(self.run_button, 1, wx.ALL, 5)
-        side_sizer.Add(self.text_box, 1, wx.ALL, 5)
+        # Simulation controls box
+        sim_box = wx.StaticBox(self, wx.ID_ANY, "Simulation")
+        sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
+        sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
+        sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
+        sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
+        sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
 
+
+        # Switches box
+        switch_box = wx.StaticBox(self, wx.ID_ANY, "Switches")
+        switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
+        switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
+        switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Monitors box
+        monitor_box = wx.StaticBox(self, wx.ID_ANY, "Monitors")
+        monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
+        monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
+        monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
+        monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
+        monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
+
+        side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Put the two switch buttons side by side
+        switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
+        switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
+        switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
+
+        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
         self.SetSizeHints(600, 600)
         self.SetSizer(main_sizer)
+
+        self.CreateStatusBar()
+        self.SetStatusText("Ready")
+
+        
 
     def on_menu(self, event):
         """Handle the event when the user selects a menu item."""
@@ -327,9 +379,28 @@ class Gui(wx.Frame):
         """Handle the event when the user clicks the run button."""
         text = "Run button pressed."
         self.canvas.render(text)
-
-    def on_text_box(self, event):
-        """Handle the event when the user enters text."""
-        text_box_value = self.text_box.GetValue()
-        text = "".join(["New text box value: ", text_box_value])
+    def on_continue_button(self, event):
+        """Handle the event when the user clicks the continue button."""
+        text = "Continue button pressed."
         self.canvas.render(text)
+
+    def on_switch_on(self, event):
+        """Handle the event when the user clicks the switch on button."""
+        text = "Switch ON pressed."
+        self.canvas.render(text)
+
+    def on_switch_off(self, event):
+        """Handle the event when the user clicks the switch off button."""
+        text = "Switch OFF pressed."
+        self.canvas.render(text)
+
+    def on_add_monitor(self, event):
+        """Handle the event when the user clicks the add monitor button."""
+        text = "Add monitor pressed."
+        self.canvas.render(text)
+
+    def on_remove_monitor(self, event):
+        """Handle the event when the user clicks the remove monitor button."""
+        text = "Remove monitor pressed."
+        self.canvas.render(text)
+ 
