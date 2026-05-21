@@ -12,69 +12,56 @@ import uuid
 
 
 class Names:
-    """Map variable names and string names to unique integers.
-
-    This class deals with storing grammatical keywords and user-defined words,
-    and their corresponding name IDs, which are internal indexing integers. It
-    provides functions for looking up either the name ID or the name string.
-    It also keeps track of the number of error codes defined by other classes,
-    and allocates new, unique error codes on demand.
-
-    Parameters
-    ----------
-    No parameters.
-
-    Public methods
-    -------------
-    unique_error_codes(self, num_error_codes): Returns a list of unique integer
-                                               error codes.
-
-    query(self, name_string): Returns the corresponding name ID for the
-                        name string. Returns None if the string is not present.
-
-    lookup(self, name_string_list): Returns a list of name IDs for each
-                        name string. Adds a name if not already present.
-
-    get_name_string(self, name_id): Returns the corresponding name string for
-                        the name ID. Returns None if the ID is not present.
-    """
+    """Map variable names and string names to unique integers."""
 
     def __init__(self):
-        """Initialise names list."""
-        self.error_code_count = 0  # how many error codes have been declared
-        self.name_IDS = {}
-        self.inv_name_IDS = {}
+        """Initialise names list, dictionary and error code count."""
+        self.error_code_count = 0
+        self.names_list = []   # index is the ID, value is the string
+        self.names_dict = {}   # key is the string, value is the ID
 
     def unique_error_codes(self, num_error_codes):
         """Return a list of unique integer error codes."""
         if not isinstance(num_error_codes, int):
             raise TypeError("Expected num_error_codes to be an integer.")
         self.error_code_count += num_error_codes
-        return range(self.error_code_count - num_error_codes, self.error_code_count)
+        return range(self.error_code_count - num_error_codes,
+                     self.error_code_count)
 
     def query(self, name_string):
-        """Return the corresponding name ID for name_string.
-        If the name string is not present in the names list, return None.
-        """
-        return self.name_IDS.get(name_string)
+        """Return the ID of name_string, or None if not present."""
+        if not isinstance(name_string, str):
+            raise TypeError("Expected a string.")
+        return self.names_dict.get(name_string, None)
 
-    def lookup(self, name_string_list):
-        """Return a list of name IDs for each name string in name_string_list.
+    def lookup(self, name_string_or_list):
+        """Return name ID(s) for the given string or list of strings.
 
-        If the name string is not present in the names list, add it.
+        If a single string is given, returns a single ID.
+        If a list is given, returns a list of IDs.
+        Adds any new names automatically.
         """
-        output = []
-        for name_string in name_string_list:
-            if name_string not in self.name_IDS:
-                id = uuid.uuid4()
-                self.name_IDS[name_string] = id
-                self.inv_name_IDS[id] = name_string
-            output.append(self.name_IDS[name_string])
-        return output
+        if isinstance(name_string_or_list, str):
+            return self._lookup_single(name_string_or_list)
+        elif isinstance(name_string_or_list, list):
+            return [self._lookup_single(s) for s in name_string_or_list]
+        else:
+            raise TypeError("Expected a string or list of strings.")
+
+    def _lookup_single(self, name_string):
+        """Look up or add a single name string and return its ID."""
+        if not isinstance(name_string, str):
+            raise TypeError("Name must be a string.")
+        if name_string not in self.names_dict:
+            name_id = len(self.names_list)
+            self.names_list.append(name_string)
+            self.names_dict[name_string] = name_id
+        return self.names_dict[name_string]
 
     def get_name_string(self, name_id):
-        """Return the corresponding name string for name_id.
-
-        If the name_id is not an index in the names list, return None.
-        """
-        return self.inv_name_IDS.get(name_id)
+        """Return the name string for name_id, or None if invalid."""
+        if not isinstance(name_id, int):
+            raise TypeError("Name ID must be an integer.")
+        if 0 <= name_id < len(self.names_list):
+            return self.names_list[name_id]
+        return None
