@@ -15,7 +15,7 @@ from tkinter import dialog
 import wx
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
-
+import datetime
 from names import Names
 from devices import Devices
 from network import Network
@@ -273,10 +273,9 @@ class Gui(wx.Frame):
         # Configure the file menu
         fileMenu = wx.Menu()
         menuBar = wx.MenuBar()
-        fileMenu.Append(wx.ID_ABOUT, "&About")
-        fileMenu.Append(wx.ID_EXIT, "&Exit")
-        # In the menu setup section
         fileMenu.Append(wx.ID_OPEN, "&Open")
+        fileMenu.Append(wx.ID_SAVE, "&Save")
+        fileMenu.AppendSeparator()
         fileMenu.Append(wx.ID_ABOUT, "&About")
         fileMenu.Append(wx.ID_EXIT, "&Exit")
         menuBar.Append(fileMenu, "&File")
@@ -305,6 +304,22 @@ class Gui(wx.Frame):
         self.reset_button = wx.Button(self, wx.ID_ANY, "Reset")
 
         self.console = wx.TextCtrl(self, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
+        console_font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        self.console.SetFont(console_font)
+
+
+        self.run_button.SetToolTip("Run the simulation from scratch for N cycles")
+        self.continue_button.SetToolTip("Continue the simulation for N additional cycles")
+        self.reset_button.SetToolTip("Reset the simulation to its initial state")
+        self.switch_on.SetToolTip("Set the selected switch to ON (1)")
+        self.switch_off.SetToolTip("Set the selected switch to OFF (0)")
+        self.add_monitor_btn.SetToolTip("Add a monitor to the selected signal")
+        self.remove_monitor_btn.SetToolTip("Remove the selected monitor")
+        self.spin.SetToolTip("Number of cycles to run or continue")
+
+        self.run_button.SetBackgroundColour(wx.Colour(100, 200, 100))   # green
+        self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
+        self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
         
 
 
@@ -328,6 +343,7 @@ class Gui(wx.Frame):
 
         main_sizer.Add(self.canvas, 5, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(side_sizer, 1, wx.ALL, 5)
+        side_sizer.SetMinSize((200, -1))  # set a minimum width for the side panel
 
         # Simulation controls box
         sim_box = wx.StaticBox(self, wx.ID_ANY, "Simulation")
@@ -336,6 +352,7 @@ class Gui(wx.Frame):
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
+        sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
 
 
         # Switches box
@@ -355,14 +372,6 @@ class Gui(wx.Frame):
         console_box = wx.StaticBox(self, wx.ID_ANY, "Console")
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
-        side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
-
-        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
 
         # Put the two switch buttons side by side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -370,9 +379,12 @@ class Gui(wx.Frame):
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
 
-        #side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
-        #side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        
         self.SetSizeHints(600, 600)
         self.SetSizer(main_sizer)
 
@@ -396,8 +408,10 @@ class Gui(wx.Frame):
         if Id == wx.ID_OPEN:
             wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
             dialog = wx.FileDialog(self, "Open circuit definition file",wildcard=wildcard,style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+
             if dialog.ShowModal() == wx.ID_OK:
                 path = dialog.GetPath()
+                self.SetTitle("Logic Simulator - " + path)
                 self.SetStatusText("Opened: " + path)
                 self.log("Opened file: " + path)
             dialog.Destroy()
@@ -461,5 +475,6 @@ class Gui(wx.Frame):
         self.log("Simulation reset.")
 
     def log(self, message):
-        """Append a message to the console output."""
-        self.console.AppendText(message + "\n")
+        """Append a time-stamped message to the console output."""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.console.AppendText(f"[{timestamp}] {message}\n")
