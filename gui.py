@@ -9,6 +9,9 @@ MyGLCanvas - handles all canvas drawing operations.
 Gui - configures the main window and all the widgets.
 """
 
+from email.mime import message
+from tkinter import dialog
+
 import wx
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
@@ -272,6 +275,10 @@ class Gui(wx.Frame):
         menuBar = wx.MenuBar()
         fileMenu.Append(wx.ID_ABOUT, "&About")
         fileMenu.Append(wx.ID_EXIT, "&Exit")
+        # In the menu setup section
+        fileMenu.Append(wx.ID_OPEN, "&Open")
+        fileMenu.Append(wx.ID_ABOUT, "&About")
+        fileMenu.Append(wx.ID_EXIT, "&Exit")
         menuBar.Append(fileMenu, "&File")
         self.SetMenuBar(menuBar)
 
@@ -295,6 +302,11 @@ class Gui(wx.Frame):
         self.add_monitor_btn = wx.Button(self, wx.ID_ANY, "Add Monitor")
         self.remove_monitor_btn = wx.Button(self, wx.ID_ANY, "Remove Monitor")
 
+        self.reset_button = wx.Button(self, wx.ID_ANY, "Reset")
+
+        self.console = wx.TextCtrl(self, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
+        
+
 
         #bind events to the widgets
         self.Bind(wx.EVT_MENU, self.on_menu)
@@ -307,6 +319,8 @@ class Gui(wx.Frame):
 
         self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
         self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
+
+        self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
 
         # Configure sizers for layout
         main_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -338,7 +352,17 @@ class Gui(wx.Frame):
         monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
         monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
 
+        console_box = wx.StaticBox(self, wx.ID_ANY, "Console")
+        console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
+        console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
         side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
 
         # Put the two switch buttons side by side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -346,9 +370,9 @@ class Gui(wx.Frame):
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
 
-        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        #side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        #side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
         self.SetSizeHints(600, 600)
         self.SetSizer(main_sizer)
 
@@ -364,43 +388,78 @@ class Gui(wx.Frame):
             self.Close(True)
         if Id == wx.ID_ABOUT:
             wx.MessageBox(
-                "Logic Simulator\nCreated by Mojisola Agboola\n2017",
-                "About Logsim",
+                "Logic Simulator\nGF2 Software Project\n"
+                "Cambridge University Engineering Department\n2026",
+                "About Logic Simulator",
                 wx.ICON_INFORMATION | wx.OK,
             )
+        if Id == wx.ID_OPEN:
+            wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
+            dialog = wx.FileDialog(self, "Open circuit definition file",wildcard=wildcard,style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+            if dialog.ShowModal() == wx.ID_OK:
+                path = dialog.GetPath()
+                self.SetStatusText("Opened: " + path)
+                self.log("Opened file: " + path)
+            dialog.Destroy()
 
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
         text = "".join(["New spin control value: ", str(spin_value)])
         self.canvas.render(text)
+        self.log(text)
 
     def on_run_button(self, event):
         """Handle the event when the user clicks the run button."""
-        text = "Run button pressed."
-        self.canvas.render(text)
+        cycles = self.spin.GetValue()
+        self.SetStatusText("Running for " + str(cycles) + " cycles...")
+        self.log("Run clicked: " + str(cycles) + " cycles requested.")
+        self.canvas.render("")
+
     def on_continue_button(self, event):
         """Handle the event when the user clicks the continue button."""
-        text = "Continue button pressed."
-        self.canvas.render(text)
+        cycles = self.spin.GetValue()
+        self.SetStatusText("Continuing for " + str(cycles) + " cycles...")
+        self.log("Continue clicked: " + str(cycles) + " cycles requested.")
 
     def on_switch_on(self, event):
         """Handle the event when the user clicks the switch on button."""
-        text = "Switch ON pressed."
-        self.canvas.render(text)
+        selection = self.switch_choice.GetSelection()
+        if selection == wx.NOT_FOUND:
+            self.SetStatusText("Error: please select a switch first.")
+            return
+        switch = self.switch_choice.GetString(selection)
+        self.SetStatusText("Switch " + switch + " set ON.")
+        self.log("Switch " + switch + " set ON.")
 
     def on_switch_off(self, event):
         """Handle the event when the user clicks the switch off button."""
-        text = "Switch OFF pressed."
-        self.canvas.render(text)
+        selection = self.switch_choice.GetSelection()
+        if selection == wx.NOT_FOUND:
+            self.SetStatusText("Error: please select a switch first.")
+            return
+        switch = self.switch_choice.GetString(selection)
+        self.SetStatusText("Switch " + switch + " set OFF.")
+        self.log("Switch " + switch + " set OFF.")
 
     def on_add_monitor(self, event):
         """Handle the event when the user clicks the add monitor button."""
         text = "Add monitor pressed."
         self.canvas.render(text)
+        self.log("Add monitor pressed.")
 
     def on_remove_monitor(self, event):
         """Handle the event when the user clicks the remove monitor button."""
         text = "Remove monitor pressed."
         self.canvas.render(text)
- 
+        self.log("Remove monitor pressed.")
+    
+    def on_reset_button(self, event):
+        """Handle the event when the user clicks the reset button."""
+        self.SetStatusText("Simulation reset.")
+        self.canvas.render("Simulation reset.")
+        self.log("Simulation reset.")
+
+    def log(self, message):
+        """Append a message to the console output."""
+        self.console.AppendText(message + "\n")
