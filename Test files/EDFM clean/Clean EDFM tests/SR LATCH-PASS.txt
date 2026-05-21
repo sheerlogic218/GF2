@@ -1,0 +1,20 @@
+module sr_latch : S[1], R[1] -> Q[1], Qbar[1] ;
+
+    switch S = 0 ;
+    switch R = 0 ;
+
+    wire nand1_out ;
+    wire nand2_out ;
+
+    // NAND gate behaviour: output = !(in1 * in2)
+    // We express this using the combinatorial assignment
+    nand1_out = !(S * nand2_out) ;
+    nand2_out = !(R * nand1_out) ;
+
+    Q    = nand1_out ;
+    Qbar = nand2_out ;
+
+    monitor Q ;
+    monitor Qbar ;
+
+end ;

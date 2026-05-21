@@ -1,0 +1,26 @@
+module half_adder : -> ;
+ 
+    switch A = 0 ;
+    switch B = 0 ;
+ 
+    wire sum ;
+    wire carry ;
+ 
+    sum   = A ^ B ;
+    carry = A * B ;
+ 
+    monitor sum ;
+    monitor carry ;
+ 
+end ;
+ 
+module inverter : -> ;
+ 
+    switch X = 1 ;
+    wire out ;
+ 
+    out = !X ;
+ 
+    monitor out ;
+ 
+end ;
