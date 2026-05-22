@@ -56,6 +56,8 @@ class Names:
         """Return the corresponding name ID for name_string.
         If the name string is not present in the names list, return None.
         """
+        if not isinstance(name_string, str):
+            raise TypeError("Expected a string.")
         return self.name_IDS.get(name_string)
 
     def lookup(self, name_string_list):
@@ -72,9 +74,11 @@ class Names:
             output.append(self.name_IDS[name_string])
         return output
 
-    def get_name_string(self, name_id):
+    def get_name_string(self, name_id: int) -> str | None:
         """Return the corresponding name string for name_id.
 
         If the name_id is not an index in the names list, return None.
         """
+        if not isinstance(name_id, int):
+            raise TypeError("Name ID must be an integer.")
         return self.inv_name_IDS.get(name_id)

@@ -10,6 +10,7 @@ Symbol - encapsulates a symbol and stores its properties.
 """
 
 from names import Names
+import re
 
 
 class Symbol:
@@ -73,6 +74,20 @@ class Scanner:
             "assign",
         ]
         self.names.lookup(self.keywords)
+
+    def group_brackets(self, val: str):
+        re_exp = re.compile(r"(\([a-zA-Z0-9+*^! ]*\))")
+        return re.split(re_exp, val)
+
+    def expression(self, line: str):
+        """Process an expression line."""
+        parts = line.split("=")
+        if len(parts) != 2:
+            raise SyntaxError(f"Invalid expression line: {line}")
+        var = parts[0].strip()
+        val = parts[1].strip()
+
+        # check there are no variables begining with strings
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
