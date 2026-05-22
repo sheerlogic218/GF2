@@ -40,7 +40,7 @@ port_name   = "CLK" | "DATA" | "SET" | "CLEAR" | "Q" | "QBAR" ;
 
 monitor     = "monitor" , ( signal_ref | port_ref ) , ";" ;
 
-instance	= "instance", name, "of", name, "(", bind_list, "->", bind_list, ")", ";";
+instance	= "instance", name, "(", bind_list, "->", bind_list, ")", ";";
 
 bind_list  = [ signal_ref , { "," , signal_ref } ] ;
 
