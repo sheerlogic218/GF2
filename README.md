@@ -9,4 +9,8 @@ parse
 gui
 
 
+error handling:
+catch file not found errors
+
+
 

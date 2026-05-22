@@ -53,7 +53,26 @@ class Scanner:
         """Open specified file and initialise reserved words and IDs."""
         with open(path, "r") as f:
             self.text = f.read()
+
         self.names = names
+        self.ptr = 0
+        self.line_count = 1
+        self.line_position = 1
+
+        self.keywords = [
+            "prog",
+            "def",
+            "end",
+            "in",
+            "out",
+            "clk",
+            "wire",
+            "monitor",
+            "nonblocking",
+            "len",
+            "assign",
+        ]
+        self.names.lookup(self.keywords)
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
