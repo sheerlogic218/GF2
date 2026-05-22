@@ -25,32 +25,7 @@ from parse import Parser
 
 
 class MyGLCanvas(wxcanvas.GLCanvas):
-    """Handle all drawing operations.
-
-    This class contains functions for drawing onto the canvas. It
-    also contains handlers for events relating to the canvas.
-
-    Parameters
-    ----------
-    parent: parent window.
-    devices: instance of the devices.Devices() class.
-    monitors: instance of the monitors.Monitors() class.
-
-    Public methods
-    --------------
-    init_gl(self): Configures the OpenGL context.
-
-    render(self, text): Handles all drawing operations.
-
-    on_paint(self, event): Handles the paint event.
-
-    on_size(self, event): Handles the canvas resize event.
-
-    on_mouse(self, event): Handles mouse events.
-
-    render_text(self, text, x_pos, y_pos): Handles text drawing
-                                           operations.
-    """
+    """Handle all drawing operations."""
 
     def __init__(self, parent, devices, monitors):
         """Initialise canvas properties and useful variables."""
@@ -88,7 +63,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         size = self.GetClientSize()
         self.SetCurrent(self.context)
         GL.glDrawBuffer(GL.GL_BACK)
-        GL.glClearColor(0.07, 0.10, 0.16, 0.9)#dark blue background
+        GL.glClearColor(0.07, 0.10, 0.16, 0.9)  # dark blue background
         GL.glViewport(0, 0, size.width, size.height)
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
@@ -102,32 +77,77 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle all drawing operations."""
         self.SetCurrent(self.context)
         if not self.init:
-            # Configure the viewport, modelview and projection matrices
             self.init_gl()
             self.init = True
 
         # Clear everything
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
-        # Draw specified text at position (10, 10)
+        # Draw debugging/status text
         self.render_text(text, 10, 10)
 
-        # Draw a sample signal trace
-        GL.glColor3f(0.0, 0.0, 1.0)  # signal trace is blue
-        GL.glBegin(GL.GL_LINE_STRIP)
-        for i in range(10):
-            x = (i * 20) + 10
-            x_next = (i * 20) + 30
-            if i % 2 == 0:
-                y = 75
-            else:
-                y = 100
-            GL.glVertex2f(x, y)
-            GL.glVertex2f(x_next, y)
+        # --- GRID & SIGNAL CONSTANTS ---
+        box_x_start = 60
+        box_x_end = 460
+        box_y_bot = 40
+        box_y_top = 120
+        cycle_width = 40
+        high_y = 100
+        low_y = 60
+        num_cycles = 10
+
+        # --- DRAW Y-AXIS LABELS ---
+        self.render_text("High", 20, high_y - 4)
+        self.render_text("Low", 25, low_y - 4)
+
+        # --- DRAW BOUNDING BOX ---
+        GL.glColor3f(0.3, 0.4, 0.5)  # Steel blue border
+        GL.glLineWidth(1.5)
+        GL.glBegin(GL.GL_LINE_LOOP)
+        GL.glVertex2f(box_x_start, box_y_bot)
+        GL.glVertex2f(box_x_end, box_y_bot)
+        GL.glVertex2f(box_x_end, box_y_top)
+        GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
-        # We have been drawing to the back buffer, flush the graphics pipeline
-        # and swap the back buffer to the front
+        # --- DRAW CLOCK CYCLES (VERTICAL DASHED LINES) ---
+        GL.glEnable(GL.GL_LINE_STIPPLE)
+        GL.glLineStipple(1, 0x00FF)  # Dashed pattern
+        GL.glColor3f(0.2, 0.3, 0.4)  # Faint line color
+        GL.glBegin(GL.GL_LINES)
+        for i in range(num_cycles + 1):
+            x = box_x_start + (i * cycle_width)
+            GL.glVertex2f(x, box_y_bot)
+            GL.glVertex2f(x, box_y_top)
+        GL.glEnd()
+        GL.glDisable(GL.GL_LINE_STIPPLE)
+
+        # --- DRAW HARDCODED SIGNAL TRACE ---
+        GL.glColor3f(0.0, 1.0, 0.4)  # Signal trace is bright green
+        GL.glLineWidth(2.5)
+        GL.glBegin(GL.GL_LINE_STRIP)
+        
+        for i in range(num_cycles):
+            x = box_x_start + (i * cycle_width)
+            x_next = box_x_start + ((i + 1) * cycle_width)
+            
+            # Determine current state (alternating for demonstration)
+            current_y = high_y if i % 2 == 0 else low_y
+            
+            # Draw horizontal state line
+            GL.glVertex2f(x, current_y)
+            GL.glVertex2f(x_next, current_y)
+            
+            # Draw vertical transition edge (if not the last cycle)
+            if i < num_cycles - 1:
+                next_y = low_y if i % 2 == 0 else high_y
+                GL.glVertex2f(x_next, current_y)
+                GL.glVertex2f(x_next, next_y)
+                
+        GL.glEnd()
+        GL.glLineWidth(1.0) # Reset line width
+
+        # Flush the graphics pipeline and swap the back buffer to the front
         GL.glFlush()
         self.SwapBuffers()
 
@@ -135,7 +155,6 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle the paint event."""
         self.SetCurrent(self.context)
         if not self.init:
-            # Configure the viewport, modelview and projection matrices
             self.init_gl()
             self.init = True
 
@@ -152,86 +171,57 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
     def on_size(self, event):
         """Handle the canvas resize event."""
-        # Forces reconfiguration of the viewport, modelview and projection
-        # matrices on the next paint event
         self.init = False
 
     def on_mouse(self, event):
         """Handle mouse events."""
         text = ""
-        # Calculate object coordinates of the mouse position
         size = self.GetClientSize()
         ox = (event.GetX() - self.pan_x) / self.zoom
         oy = (size.height - event.GetY() - self.pan_y) / self.zoom
         old_zoom = self.zoom
+        
         if event.ButtonDown():
             self.last_mouse_x = event.GetX()
             self.last_mouse_y = event.GetY()
-            text = "".join(
-                [
-                    "Mouse button pressed at: ",
-                    str(event.GetX()),
-                    ", ",
-                    str(event.GetY()),
-                ]
-            )
+            text = f"Mouse button pressed at: {event.GetX()}, {event.GetY()}"
+            
         if event.ButtonUp():
-            text = "".join(
-                [
-                    "Mouse button released at: ",
-                    str(event.GetX()),
-                    ", ",
-                    str(event.GetY()),
-                ]
-            )
+            text = f"Mouse button released at: {event.GetX()}, {event.GetY()}"
+            
         if event.Leaving():
-            text = "".join(
-                ["Mouse left canvas at: ", str(event.GetX()), ", ", str(event.GetY())]
-            )
+            text = f"Mouse left canvas at: {event.GetX()}, {event.GetY()}"
+            
         if event.Dragging():
             self.pan_x += event.GetX() - self.last_mouse_x
             self.pan_y -= event.GetY() - self.last_mouse_y
             self.last_mouse_x = event.GetX()
             self.last_mouse_y = event.GetY()
             self.init = False
-            text = "".join(
-                [
-                    "Mouse dragged to: ",
-                    str(event.GetX()),
-                    ", ",
-                    str(event.GetY()),
-                    ". Pan is now: ",
-                    str(self.pan_x),
-                    ", ",
-                    str(self.pan_y),
-                ]
-            )
+            text = f"Mouse dragged. Pan is now: {self.pan_x}, {self.pan_y}"
+            
         if event.GetWheelRotation() < 0:
             self.zoom *= 1.0 + (event.GetWheelRotation() / (20 * event.GetWheelDelta()))
-            # Adjust pan so as to zoom around the mouse position
             self.pan_x -= (self.zoom - old_zoom) * ox
             self.pan_y -= (self.zoom - old_zoom) * oy
             self.init = False
-            text = "".join(
-                ["Negative mouse wheel rotation. Zoom is now: ", str(self.zoom)]
-            )
+            text = f"Negative mouse wheel rotation. Zoom is now: {self.zoom}"
+            
         if event.GetWheelRotation() > 0:
             self.zoom /= 1.0 - (event.GetWheelRotation() / (20 * event.GetWheelDelta()))
-            # Adjust pan so as to zoom around the mouse position
             self.pan_x -= (self.zoom - old_zoom) * ox
             self.pan_y -= (self.zoom - old_zoom) * oy
             self.init = False
-            text = "".join(
-                ["Positive mouse wheel rotation. Zoom is now: ", str(self.zoom)]
-            )
+            text = f"Positive mouse wheel rotation. Zoom is now: {self.zoom}"
+            
         if text:
             self.render(text)
         else:
-            self.Refresh()  # triggers the paint event
+            self.Refresh()
 
     def render_text(self, text, x_pos, y_pos):
         """Handle text drawing operations."""
-        GL.glColor3f(0.0, 0.0, 0.0)  # text is black
+        GL.glColor3f(1.0, 1.0, 1.0)  # Text is now white for visibility
         GL.glRasterPos2f(x_pos, y_pos)
         font = GLUT.GLUT_BITMAP_HELVETICA_12
 
@@ -244,27 +234,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
 
 class Gui(wx.Frame):
-    """Configure the main window and all the widgets.
-
-    This class provides a graphical user interface for the Logic Simulator and
-    enables the user to change the circuit properties and run simulations.
-
-    Parameters
-    ----------
-    title: title of the window.
-
-    Public methods
-    --------------
-    on_menu(self, event): Event handler for the file menu.
-
-    on_spin(self, event): Event handler for when the user changes the spin
-                           control value.
-
-    on_run_button(self, event): Event handler for when the user clicks the run
-                                button.
-
-    on_text_box(self, event): Event handler for when the user enters text.
-    """
+    """Configure the main window and all the widgets."""
 
     def __init__(self, title, path, names, devices, network, monitors):
         """Initialise widgets and layout."""
@@ -307,7 +277,6 @@ class Gui(wx.Frame):
         console_font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
         self.console.SetFont(console_font)
 
-
         self.run_button.SetToolTip("Run the simulation from scratch for N cycles")
         self.continue_button.SetToolTip("Continue the simulation for N additional cycles")
         self.reset_button.SetToolTip("Reset the simulation to its initial state")
@@ -320,8 +289,6 @@ class Gui(wx.Frame):
         self.run_button.SetBackgroundColour(wx.Colour(100, 200, 100))   # green
         self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
         self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
-        
-
 
         #bind events to the widgets
         self.Bind(wx.EVT_MENU, self.on_menu)
@@ -343,7 +310,7 @@ class Gui(wx.Frame):
 
         main_sizer.Add(self.canvas, 5, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(side_sizer, 1, wx.ALL, 5)
-        side_sizer.SetMinSize((200, -1))  # set a minimum width for the side panel
+        side_sizer.SetMinSize((200, -1)) 
 
         # Simulation controls box
         sim_box = wx.StaticBox(self, wx.ID_ANY, "Simulation")
@@ -353,7 +320,6 @@ class Gui(wx.Frame):
         sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
-
 
         # Switches box
         switch_box = wx.StaticBox(self, wx.ID_ANY, "Switches")
@@ -384,14 +350,11 @@ class Gui(wx.Frame):
         side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
         side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
-        
         self.SetSizeHints(600, 600)
         self.SetSizer(main_sizer)
 
         self.CreateStatusBar()
         self.SetStatusText("Ready")
-
-        
 
     def on_menu(self, event):
         """Handle the event when the user selects a menu item."""
