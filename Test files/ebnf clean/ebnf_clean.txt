@@ -9,7 +9,7 @@ prog_defn   = "module" , name , ":"
 port_list   = [ port , { "," , port } ] ;
 port        = name , [ "[" , integer , "]" ] ;
 
-statement   = declaration| assignment| monitor | instance| comment;
+statement   = declaration| assignment| monitor | instance;
 
 declaration = wire_decl
             | clock_decl
@@ -44,7 +44,6 @@ instance	= "instance", name, "(", bind_list, "->", bind_list, ")", ";";
 
 bind_list  = [ signal_ref , { "," , signal_ref } ] ;
 
-comment = "\\", [digit|letter| " "] ;
 
 name		= letter, {letter | digit | "_" };
 integer = "0" | nonzero_digit , { digit } ;
