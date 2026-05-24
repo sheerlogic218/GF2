@@ -251,29 +251,34 @@ class Gui(wx.Frame):
         menuBar.Append(fileMenu, "&File")
         self.SetMenuBar(menuBar)
 
+        #create a splitter window to divide the canvas and the side panel
+        self.splitter = wx.SplitterWindow(self)
+
         # Canvas for drawing signals
-        self.canvas = MyGLCanvas(self, devices, monitors)
+        self.canvas = MyGLCanvas(self.splitter, devices, monitors)
+
+        self.side_panel = wx.Panel(self.splitter)
 
         # Configure the widgets
-        self.cycles_label = wx.StaticText(self, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self, wx.ID_ANY, "10", min=1, max=1000)
-        self.run_button = wx.Button(self, wx.ID_ANY, "Run")
-        self.continue_button = wx.Button(self, wx.ID_ANY, "Continue")
+        self.cycles_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Cycles")
+        self.spin = wx.SpinCtrl(self.side_panel, wx.ID_ANY, "10", min=1, max=1000)
+        self.run_button = wx.Button(self.side_panel, wx.ID_ANY, "Run")
+        self.continue_button = wx.Button(self.side_panel, wx.ID_ANY, "Continue")
 
-        self.switch_label = wx.StaticText(self, wx.ID_ANY, "Select switch:")
-        self.switch_choice = wx.Choice(self, wx.ID_ANY, 
+        self.switch_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Select switch:")
+        self.switch_choice = wx.Choice(self.side_panel, wx.ID_ANY, 
                                choices=["SW1", "SW2", "SW3"])
-        self.switch_on = wx.Button(self, wx.ID_ANY, "Set ON")
-        self.switch_off = wx.Button(self, wx.ID_ANY, "Set OFF")
+        self.switch_on = wx.Button(self.side_panel, wx.ID_ANY, "Set ON")
+        self.switch_off = wx.Button(self.side_panel, wx.ID_ANY, "Set OFF")
 
-        self.monitors_label = wx.StaticText(self, wx.ID_ANY, "Monitors:")
-        self.monitors_list = wx.ListBox(self, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
-        self.add_monitor_btn = wx.Button(self, wx.ID_ANY, "Add Monitor")
-        self.remove_monitor_btn = wx.Button(self, wx.ID_ANY, "Remove Monitor")
+        self.monitors_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Monitors:")
+        self.monitors_list = wx.ListBox(self.side_panel, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
+        self.add_monitor_btn = wx.Button(self.side_panel, wx.ID_ANY, "Add Monitor")
+        self.remove_monitor_btn = wx.Button(self.side_panel, wx.ID_ANY, "Remove Monitor")
 
-        self.reset_button = wx.Button(self, wx.ID_ANY, "Reset")
+        self.reset_button = wx.Button(self.side_panel, wx.ID_ANY, "Reset")
 
-        self.console = wx.TextCtrl(self, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
+        self.console = wx.TextCtrl(self.side_panel, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
         console_font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
         self.console.SetFont(console_font)
 
@@ -290,6 +295,12 @@ class Gui(wx.Frame):
         self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
         self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
 
+        self.zoom_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Zoom:")
+        self.zoom_slider = wx.Slider(self.side_panel, wx.ID_ANY, value=100, minValue=10, maxValue=300, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
+        self.zoom_slider.SetToolTip("Zoom in/out of the signal view (10% to 300%)")
+
+        self.zoom_slider.Bind(wx.EVT_SLIDER, self.on_zoom_slider)
+
         #bind events to the widgets
         self.Bind(wx.EVT_MENU, self.on_menu)
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
@@ -305,37 +316,40 @@ class Gui(wx.Frame):
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
 
         # Configure sizers for layout
-        main_sizer = wx.BoxSizer(wx.HORIZONTAL)
         side_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        main_sizer.Add(self.canvas, 5, wx.EXPAND | wx.ALL, 5)
-        main_sizer.Add(side_sizer, 1, wx.ALL, 5)
+        self.side_panel.SetSizer(side_sizer)
         side_sizer.SetMinSize((200, -1)) 
 
+        #split window
+        self.splitter.SplitVertically(self.canvas, self.side_panel, -250)
+        self.splitter.SetMinimumPaneSize(200)  # Set minimum pane size to prevent collapsing
+
         # Simulation controls box
-        sim_box = wx.StaticBox(self, wx.ID_ANY, "Simulation")
+        sim_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Simulation")
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
+        sim_sizer.Add(self.zoom_label, 0, wx.ALL, 5)
+        sim_sizer.Add(self.zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
 
         # Switches box
-        switch_box = wx.StaticBox(self, wx.ID_ANY, "Switches")
+        switch_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Switches")
         switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
         switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
 
         # Monitors box
-        monitor_box = wx.StaticBox(self, wx.ID_ANY, "Monitors")
+        monitor_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Monitors")
         monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
         monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
         monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
 
-        console_box = wx.StaticBox(self, wx.ID_ANY, "Console")
+        console_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Console")
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
 
@@ -349,6 +363,9 @@ class Gui(wx.Frame):
         side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
         side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
         side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer= wx.BoxSizer(wx.HORIZONTAL)
+        main_sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 0)
 
         self.SetSizeHints(600, 600)
         self.SetSizer(main_sizer)
@@ -441,3 +458,18 @@ class Gui(wx.Frame):
         """Append a time-stamped message to the console output."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.console.AppendText(f"[{timestamp}] {message}\n")
+
+    def on_zoom_slider(self, event):
+        """Handle the event when the user changes the zoom slider."""
+        # Convert slider value (10-300) back to a float multiplier (0.1 to 3.0)
+        new_zoom = self.zoom_slider.GetValue() / 100.0
+        
+        # Update the canvas zoom property
+        self.canvas.zoom = new_zoom
+        
+        # Force OpenGL to rebuild the projection matrix
+        self.canvas.init = False 
+        
+        # Trigger a redraw
+        self.canvas.Refresh()
+        self.log(f"Signal scaled to {new_zoom}x")
