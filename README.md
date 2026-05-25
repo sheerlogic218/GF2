@@ -11,6 +11,8 @@ gui
 
 error handling:
 catch file not found errors
+check used variables vs declared inputs/outputs
+
 
 
 

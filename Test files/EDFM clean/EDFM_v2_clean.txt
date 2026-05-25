@@ -9,9 +9,7 @@ prog_defn   = "module" , name , ":"
 port_list   = [ port , { "," , port } ] ;
 port        = name , [ "[" , integer , "]" ] ;
 
-statement   = declaration
-            | assignment
-            | monitor ;
+statement   = declaration| assignment| monitor | instance;
 
 declaration = wire_decl
             | clock_decl
@@ -41,6 +39,11 @@ port_ref    = name , "." , port_name ;
 port_name   = "CLK" | "DATA" | "SET" | "CLEAR" | "Q" | "QBAR" ;
 
 monitor     = "monitor" , ( signal_ref | port_ref ) , ";" ;
+
+instance	= "instance", name, "(", bind_list, "->", bind_list, ")", ";";
+
+bind_list  = [ signal_ref , { "," , signal_ref } ] ;
+
 
 name		= letter, {letter | digit | "_" };
 integer = "0" | nonzero_digit , { digit } ;

@@ -60,7 +60,7 @@ class Names:
             raise TypeError("Expected a string.")
         return self.name_IDS.get(name_string)
 
-    def lookup(self, name_string_list):
+    def lookup(self, name_string_list) -> list:
         """Return a list of name IDs for each name string in name_string_list.
 
         If the name string is not present in the names list, add it.
