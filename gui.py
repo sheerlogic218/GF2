@@ -79,38 +79,33 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.init_gl()
             self.init = True
 
-        # 1. Clear the back buffer completely
+        # Clear background
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
-        # 2. Get dynamic window boundaries from wxPython
         size = self.GetClientSize()
         canvas_width = size.width
         canvas_height = size.height
 
         # --- DYNAMIC GRID & SIGNAL CONSTANTS ---
-        # Horizontal boundaries (stretch close to edges)
-        box_x_start = 60
-        box_x_end = canvas_width - 20  
+        box_x_start = 100            # Leave a 60-pixel distinct Y-axis channel on the left
+        box_x_end = canvas_width      # Right edge locks flat against screen
         
-        # Vertical boundaries (stretch to fill the available height dynamically)
-        box_y_bot = 20
-        box_y_top = canvas_height - 20  # Reaches nearly the bottom of the window
+        box_y_bot = 50
+        box_y_top = canvas_height - 50
         
-        # Distribute the High and Low logic levels proportionally within that height
+        # Keep high/low proportional inside the vertical span
         high_y = box_y_bot + (box_y_top - box_y_bot) * 0.75
         low_y = box_y_bot + (box_y_top - box_y_bot) * 0.25
         
         num_cycles = 10
-        
-        # Calculate how wide each clock cycle should be to fill the box evenly
         cycle_width = (box_x_end - box_x_start) / num_cycles 
 
-        # --- DRAW Y-AXIS LABELS ---
-        self.render_text("High", 20, high_y - 4)
-        self.render_text("Low", 25, low_y - 4)
+        # --- DRAW Y-AXIS LABELS (Safe inside the left margin) ---
+        self.render_text("High", 15, high_y - 4)
+        self.render_text("Low", 20, low_y - 4)
 
         # --- DRAW BOUNDING BOX ---
-        GL.glColor3f(0.3, 0.4, 0.5)  # Steel blue border
+        GL.glColor3f(0.3, 0.4, 0.5)
         GL.glLineWidth(1.5)
         GL.glBegin(GL.GL_LINE_LOOP)
         GL.glVertex2f(box_x_start, box_y_bot)
@@ -121,8 +116,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # --- DRAW CLOCK CYCLES (VERTICAL DASHED LINES) ---
         GL.glEnable(GL.GL_LINE_STIPPLE)
-        GL.glLineStipple(1, 0x00FF)  # Dashed pattern
-        GL.glColor3f(0.2, 0.3, 0.4)  # Faint line color
+        GL.glLineStipple(1, 0x00FF)
+        GL.glColor3f(0.2, 0.3, 0.4)
         GL.glBegin(GL.GL_LINES)
         for i in range(num_cycles + 1):
             x = box_x_start + (i * cycle_width)
@@ -132,34 +127,28 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glDisable(GL.GL_LINE_STIPPLE)
 
         # --- DRAW DYNAMIC SIGNAL TRACE ---
-        GL.glColor3f(0.0, 1.0, 0.4)  # Signal trace is bright green
+        GL.glColor3f(0.0, 1.0, 0.4)
         GL.glLineWidth(2.5)
         GL.glBegin(GL.GL_LINE_STRIP)
-        
         for i in range(num_cycles):
             x = box_x_start + (i * cycle_width)
             x_next = box_x_start + ((i + 1) * cycle_width)
             
-            # Determine current state (alternating for demonstration)
             current_y = high_y if i % 2 == 0 else low_y
             
-            # Draw horizontal state line
             GL.glVertex2f(x, current_y)
             GL.glVertex2f(x_next, current_y)
             
-            # Draw vertical transition edge (if not the last cycle)
             if i < num_cycles - 1:
                 next_y = low_y if i % 2 == 0 else high_y
                 GL.glVertex2f(x_next, current_y)
                 GL.glVertex2f(x_next, next_y)
-                
         GL.glEnd()
-        GL.glLineWidth(1.0) # Reset line width
+        GL.glLineWidth(1.0)
 
-        # --- DRAW TEXT ON TOP OF GRAPHICS ---
+        # Debug Text
         self.render_text(text, 10, canvas_height - 20)
 
-        # 3. SINGLE SWAP AT THE END
         GL.glFlush()
         self.SwapBuffers()
 
@@ -195,7 +184,13 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
 
-        GL.glOrtho(0, width, height, 0, -1, 1)
+        zoom_factor = getattr(self, 'zoom', 1.0)
+
+        #zoom constrained viewport
+        visible_width = width / zoom_factor
+        visible_height = height / zoom_factor
+
+        GL.glOrtho(0, visible_width, visible_height, 0, -1, 1)
 
         GL.glMatrixMode(GL.GL_MODELVIEW)
         GL.glLoadIdentity()
@@ -205,6 +200,16 @@ class MyGLCanvas(wxcanvas.GLCanvas):
     def on_mouse(self, event):
         """Handle mouse events."""
         text = ""
+        self.SetCurrent(self.context)
+        if event.GetWheelRotation() > 0:
+            self.zoom = min(5.0, self.zoom * 1.1)  # Max zoom cap: 5.0x
+            self.init = False
+            self.Refresh()
+        elif event.GetWheelRotation() < 0:
+            self.zoom = max(1.0, self.zoom / 1.1)  # Min zoom floor: 1.0x (Never reveals background)
+            self.init = False
+            self.Refresh()
+
         size = self.GetClientSize()
         ox = (event.GetX() - self.pan_x) / self.zoom
         oy = (size.height - event.GetY() - self.pan_y) / self.zoom
@@ -328,8 +333,8 @@ class Gui(wx.Frame):
         self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
 
         self.zoom_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Zoom:")
-        self.zoom_slider = wx.Slider(self.top_panel, wx.ID_ANY, value=100, minValue=10, maxValue=300, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
-        self.zoom_slider.SetToolTip("Zoom in/out of the signal view (10% to 300%)")
+        self.zoom_slider = wx.Slider(self.top_panel, wx.ID_ANY, value=100, minValue=100, maxValue=500, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
+        self.zoom_slider.SetToolTip("Zoom in/out of the signal view (100% to 500%)")
 
         self.zoom_slider.Bind(wx.EVT_SLIDER, self.on_zoom_slider)
 
@@ -497,6 +502,9 @@ class Gui(wx.Frame):
         """Handle the event when the user changes the zoom slider."""
         # Convert slider value (10-300) back to a float multiplier (0.1 to 3.0)
         new_zoom = self.zoom_slider.GetValue() / 100.0
+
+        if new_zoom < 1.0:
+            new_zoom = 1.0
         
         # Update the canvas zoom property
         self.canvas.zoom = new_zoom
