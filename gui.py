@@ -9,8 +9,7 @@ MyGLCanvas - handles all canvas drawing operations.
 Gui - configures the main window and all the widgets.
 """
 
-from email.mime import message
-from tkinter import dialog
+
 
 import wx
 import wx.glcanvas as wxcanvas
@@ -80,21 +79,31 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.init_gl()
             self.init = True
 
-        # Clear everything
+        # 1. Clear the back buffer completely
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
-        # Draw debugging/status text
-        self.render_text(text, 10, 10)
+        # 2. Get dynamic window boundaries from wxPython
+        size = self.GetClientSize()
+        canvas_width = size.width
+        canvas_height = size.height
 
-        # --- GRID & SIGNAL CONSTANTS ---
+        # --- DYNAMIC GRID & SIGNAL CONSTANTS ---
+        # Horizontal boundaries (stretch close to edges)
         box_x_start = 60
-        box_x_end = 460
-        box_y_bot = 40
-        box_y_top = 120
-        cycle_width = 40
-        high_y = 100
-        low_y = 60
+        box_x_end = canvas_width - 20  
+        
+        # Vertical boundaries (stretch to fill the available height dynamically)
+        box_y_bot = 20
+        box_y_top = canvas_height - 20  # Reaches nearly the bottom of the window
+        
+        # Distribute the High and Low logic levels proportionally within that height
+        high_y = box_y_bot + (box_y_top - box_y_bot) * 0.75
+        low_y = box_y_bot + (box_y_top - box_y_bot) * 0.25
+        
         num_cycles = 10
+        
+        # Calculate how wide each clock cycle should be to fill the box evenly
+        cycle_width = (box_x_end - box_x_start) / num_cycles 
 
         # --- DRAW Y-AXIS LABELS ---
         self.render_text("High", 20, high_y - 4)
@@ -122,7 +131,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glEnd()
         GL.glDisable(GL.GL_LINE_STIPPLE)
 
-        # --- DRAW HARDCODED SIGNAL TRACE ---
+        # --- DRAW DYNAMIC SIGNAL TRACE ---
         GL.glColor3f(0.0, 1.0, 0.4)  # Signal trace is bright green
         GL.glLineWidth(2.5)
         GL.glBegin(GL.GL_LINE_STRIP)
@@ -147,7 +156,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glEnd()
         GL.glLineWidth(1.0) # Reset line width
 
-        # Flush the graphics pipeline and swap the back buffer to the front
+        # --- DRAW TEXT ON TOP OF GRAPHICS ---
+        self.render_text(text, 10, canvas_height - 20)
+
+        # 3. SINGLE SWAP AT THE END
         GL.glFlush()
         self.SwapBuffers()
 
@@ -173,6 +185,23 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle the canvas resize event."""
         self.init = False
 
+        size = self.GetClientSize()
+
+        width = max(1, size.width)
+        height = max(1, size.height)
+
+        self.SetCurrent(self.context)
+        GL.glViewport(0, 0, width, height)
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glLoadIdentity()
+
+        GL.glOrtho(0, width, height, 0, -1, 1)
+
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glLoadIdentity()
+
+        self.Refresh()
+    
     def on_mouse(self, event):
         """Handle mouse events."""
         text = ""
@@ -257,28 +286,31 @@ class Gui(wx.Frame):
         # Canvas for drawing signals
         self.canvas = MyGLCanvas(self.splitter, devices, monitors)
 
-        self.side_panel = wx.Panel(self.splitter)
+        self.top_panel = wx.Panel(self.splitter)
+
+
+
 
         # Configure the widgets
-        self.cycles_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self.side_panel, wx.ID_ANY, "10", min=1, max=1000)
-        self.run_button = wx.Button(self.side_panel, wx.ID_ANY, "Run")
-        self.continue_button = wx.Button(self.side_panel, wx.ID_ANY, "Continue")
+        self.cycles_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Cycles")
+        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000)
+        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "Run")
+        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "Continue")
 
-        self.switch_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Select switch:")
-        self.switch_choice = wx.Choice(self.side_panel, wx.ID_ANY, 
+        self.switch_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Select switch:")
+        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY, 
                                choices=["SW1", "SW2", "SW3"])
-        self.switch_on = wx.Button(self.side_panel, wx.ID_ANY, "Set ON")
-        self.switch_off = wx.Button(self.side_panel, wx.ID_ANY, "Set OFF")
+        self.switch_on = wx.Button(self.top_panel, wx.ID_ANY, "Set ON")
+        self.switch_off = wx.Button(self.top_panel, wx.ID_ANY, "Set OFF")
 
-        self.monitors_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Monitors:")
-        self.monitors_list = wx.ListBox(self.side_panel, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
-        self.add_monitor_btn = wx.Button(self.side_panel, wx.ID_ANY, "Add Monitor")
-        self.remove_monitor_btn = wx.Button(self.side_panel, wx.ID_ANY, "Remove Monitor")
+        self.monitors_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Monitors:")
+        self.monitors_list = wx.ListBox(self.top_panel, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
+        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Add Monitor")
+        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Remove Monitor")
 
-        self.reset_button = wx.Button(self.side_panel, wx.ID_ANY, "Reset")
+        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "Reset")
 
-        self.console = wx.TextCtrl(self.side_panel, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
+        self.console = wx.TextCtrl(self.top_panel, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
         console_font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
         self.console.SetFont(console_font)
 
@@ -295,8 +327,8 @@ class Gui(wx.Frame):
         self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
         self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
 
-        self.zoom_label = wx.StaticText(self.side_panel, wx.ID_ANY, "Zoom:")
-        self.zoom_slider = wx.Slider(self.side_panel, wx.ID_ANY, value=100, minValue=10, maxValue=300, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
+        self.zoom_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Zoom:")
+        self.zoom_slider = wx.Slider(self.top_panel, wx.ID_ANY, value=100, minValue=10, maxValue=300, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
         self.zoom_slider.SetToolTip("Zoom in/out of the signal view (10% to 300%)")
 
         self.zoom_slider.Bind(wx.EVT_SLIDER, self.on_zoom_slider)
@@ -316,16 +348,13 @@ class Gui(wx.Frame):
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
 
         # Configure sizers for layout
-        side_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.side_panel.SetSizer(side_sizer)
-        side_sizer.SetMinSize((200, -1)) 
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.top_panel.SetSizer(top_sizer)
+        top_sizer.SetMinSize((-1, 400))  # Set minimum height for the top panel
 
-        #split window
-        self.splitter.SplitVertically(self.canvas, self.side_panel, -250)
-        self.splitter.SetMinimumPaneSize(200)  # Set minimum pane size to prevent collapsing
 
         # Simulation controls box
-        sim_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Simulation")
+        sim_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Simulation")
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
@@ -336,20 +365,20 @@ class Gui(wx.Frame):
         sim_sizer.Add(self.zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
 
         # Switches box
-        switch_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Switches")
+        switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
         switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
         switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
 
         # Monitors box
-        monitor_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Monitors")
+        monitor_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Monitors")
         monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
         monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
         monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
 
-        console_box = wx.StaticBox(self.side_panel, wx.ID_ANY, "Console")
+        console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
 
@@ -359,15 +388,20 @@ class Gui(wx.Frame):
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
 
-        side_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        side_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        side_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        side_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        top_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 2)
+        top_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 2)
+        top_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 2)
+        top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
+        
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas, 200)
+        self.splitter.SetMinimumPaneSize(120)  # Set minimum pane size to prevent collapsing
 
-        main_sizer= wx.BoxSizer(wx.HORIZONTAL)
+
+        main_sizer= wx.BoxSizer(wx.VERTICAL)
         main_sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 0)
 
-        self.SetSizeHints(600, 600)
+        
+        self.SetSizeHints(700, 400)
         self.SetSizer(main_sizer)
 
         self.CreateStatusBar()
