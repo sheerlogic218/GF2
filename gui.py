@@ -109,7 +109,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # Grid is fixed in physical coordinates!
         box_x_start = 60
-        box_x_end = canvas_width
+        box_x_end = canvas_width - 40
         
         box_y_bot = 20
         box_y_top = canvas_height - 20
