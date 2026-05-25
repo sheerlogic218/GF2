@@ -108,7 +108,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         canvas_height = size.height
 
         # Grid is fixed in physical coordinates!
-        box_x_start = 60
+        box_x_start = 80
         box_x_end = canvas_width - 40
         
         box_y_bot = 20
@@ -121,9 +121,11 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         num_cycles = 10
         cycle_width = (box_x_end - box_x_start) / num_cycles 
 
+        hud_x_position = self.pan_x + 20
+
         # --- DRAW Y-AXIS LABELS (Pinned to pan_x so they act as a HUD) ---
-        self.render_text("High", getattr(self, 'pan_x', 0) + 15, high_y - 4)
-        self.render_text("Low", getattr(self, 'pan_x', 0) + 20, low_y - 4)
+        self.render_text("High", hud_x_position, high_y - 4)
+        self.render_text("Low", hud_x_position, low_y - 4)
 
         # --- DRAW BOUNDING BOX ---
         GL.glColor3f(0.3, 0.4, 0.5)
@@ -134,6 +136,20 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(box_x_end, box_y_top)
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
+
+        # --- DRAW HOIZONTAL DASHED LINES ---
+        GL.glEnable(GL.GL_LINE_STIPPLE)
+        GL.glLineStipple(1, 0x00FF)
+        GL.glColor3f(0.4, 0.4, 0.4)
+        GL.glLineWidth(1.0)
+        GL.glBegin(GL.GL_LINES)
+        GL.glVertex2f(box_x_start, high_y)
+        GL.glVertex2f(box_x_end, high_y)
+
+        GL.glVertex2f(box_x_start, low_y)
+        GL.glVertex2f(box_x_end, low_y)
+        GL.glEnd()
+        GL.glDisable(GL.GL_LINE_STIPPLE)
 
         # --- DRAW CLOCK CYCLES ---
         GL.glEnable(GL.GL_LINE_STIPPLE)
@@ -197,7 +213,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
     def render_text(self, text, x_pos, y_pos):
         """Handle text drawing operations."""
-        GL.glColor3f(1.0, 1.0, 1.0)  # Text is now white for visibility
+        GL.glColor3f(1.0, 1.0, 1.0)  # Text is white for visibility
         GL.glRasterPos2f(x_pos, y_pos)
         font = GLUT.GLUT_BITMAP_HELVETICA_12
 
@@ -214,7 +230,7 @@ class Gui(wx.Frame):
 
     def __init__(self, title, path, names, devices, network, monitors):
         """Initialise widgets and layout."""
-        super().__init__(parent=None, title=title, size=(800, 600))
+        super().__init__(parent=None, title=title, size=(850, 500))
 
         # Configure the file menu
         fileMenu = wx.Menu()
@@ -271,11 +287,6 @@ class Gui(wx.Frame):
         self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
         self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
 
-        self.zoom_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Zoom:")
-        self.zoom_slider = wx.Slider(self.top_panel, wx.ID_ANY, value=100, minValue=100, maxValue=500, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
-        self.zoom_slider.SetToolTip("Zoom in/out of the signal view (100% to 500%)")
-
-        self.zoom_slider.Bind(wx.EVT_SLIDER, self.on_zoom_slider)
 
         #bind events to the widgets
         self.Bind(wx.EVT_MENU, self.on_menu)
@@ -305,8 +316,6 @@ class Gui(wx.Frame):
         sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
         sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.zoom_label, 0, wx.ALL, 5)
-        sim_sizer.Add(self.zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
 
         # Switches box
         switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
@@ -344,6 +353,11 @@ class Gui(wx.Frame):
         self.pan_y_slider = wx.Slider(self.top_panel, value=0, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
         self.pan_y_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
 
+        #RESET VIEW BUTTON
+        self.reset_view_btn = wx.Button(self.top_panel, label="Reset View")
+        self.reset_view_btn.SetToolTip("Reset zoom and pan to default")
+        self.reset_view_btn.Bind(wx.EVT_BUTTON, self.on_reset_view)
+
         # Assemble the View Controls items
         self.view_sizer.Add(view_zoom_label, 0, wx.LEFT | wx.TOP, 5)
         self.view_sizer.Add(self.view_zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
@@ -351,7 +365,7 @@ class Gui(wx.Frame):
         self.view_sizer.Add(self.pan_x_slider, 0, wx.EXPAND | wx.ALL, 5)
         self.view_sizer.Add(pan_y_label, 0, wx.LEFT, 5)
         self.view_sizer.Add(self.pan_y_slider, 0, wx.EXPAND | wx.ALL, 5)
-
+        self.view_sizer.Add(self.reset_view_btn, 0, wx.EXPAND | wx.ALL, 5)
         # Put the two switch buttons side by side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
@@ -366,7 +380,7 @@ class Gui(wx.Frame):
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
         
         # Split layout cleanly: top panel takes controls, bottom panel takes OpenGL
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas, 200)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas, 240)
         self.splitter.SetMinimumPaneSize(120)
 
         # The Frame's main sizer should only handle the splitter container!
@@ -465,16 +479,6 @@ class Gui(wx.Frame):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.console.AppendText(f"[{timestamp}] {message}\n")
 
-    def on_zoom_slider(self, event):
-        """Handle the event when the user changes the zoom slider."""
-        new_zoom = self.zoom_slider.GetValue() / 100.0
-        
-        if new_zoom < 1.0:
-            new_zoom = 1.0
-            
-        self.canvas.zoom = new_zoom
-        self.canvas.init = False
-        self.canvas.Refresh()
     
     def on_view_slider(self, event):
         """Handle updates from any of the three view control sliders."""
@@ -488,3 +492,16 @@ class Gui(wx.Frame):
         # Force OpenGL to rebuild the projection matrix and redraw
         self.canvas.init = False
         self.canvas.Refresh()
+
+    def on_reset_view(self, event):
+        """Reset all view adjustment sliders back to default and refresh canvas."""
+        # Reset the GUI slider values
+        self.view_zoom_slider.SetValue(100)
+        self.pan_x_slider.SetValue(0)
+        self.pan_y_slider.SetValue(0)
+        
+        # Trigger your existing view updater logic directly to refresh the canvas
+        self.on_view_slider(None)
+        
+        self.SetStatusText("View reset to default dimensions.")
+        self.log("View reset to default dimensions.")
