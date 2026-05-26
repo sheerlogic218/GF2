@@ -381,8 +381,8 @@ class Gui(wx.Frame):
             choices=["Signal1", "Signal2"],
             style=wx.LB_SINGLE
         )
-        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Add Monitor")
-        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Remove Monitor")
+        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "+")
+        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "-")
 
         self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "↺", size=(32, 28))
 
@@ -420,7 +420,7 @@ class Gui(wx.Frame):
         # ── Control-panel sizer ──────────────────────────────────────────────
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.top_panel.SetSizer(top_sizer)
-        top_sizer.SetMinSize((-1, 400))
+        top_sizer.SetMinSize((-1, 150))
 
         # Simulation box
         sim_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Simulation")
@@ -446,8 +446,11 @@ class Gui(wx.Frame):
         monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
-        monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
-        monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
+        # Side-by-side '+' and '-' buttons
+        monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
+        monitor_sizer.Add(monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3)
 
         # Console box
         console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
@@ -493,7 +496,7 @@ class Gui(wx.Frame):
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 240)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
         self.splitter.SetMinimumPaneSize(120)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
