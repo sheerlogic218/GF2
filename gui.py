@@ -47,11 +47,13 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         # Initialise variables for panning
         self.pan_x = 0
         self.pan_y = 0
+        self.pan_x_pct = 0.0
+        self.pan_y_pct = 0.0
         self.last_mouse_x = 0  # previous mouse x position
         self.last_mouse_y = 0  # previous mouse y position
 
         # Initialise variables for zooming
-        self.zoom = 1
+        self.zoom = 1.0
 
         # Bind events to the canvas
         self.Bind(wx.EVT_PAINT, self.on_paint)
@@ -195,10 +197,83 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle canvas resize events cleanly without duplicating ortho configurations."""
         self.init = False
         self.Refresh()
+        
+        # Notify Gui to update scrollbars on resize
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'update_scrollbars'):
+            gui = gui.GetParent()
+        if gui:
+            gui.update_scrollbars()
 
     def on_mouse(self, event):
-        """Handle mouse events (navigation handled by sliders)."""
-        pass
+        """Handle mouse events (navigation handled by scrollbars and mouse wheel/dragging)."""
+        # Find the parent Gui frame to trigger scrollbar updates
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'update_scrollbars'):
+            gui = gui.GetParent()
+
+        # Handle mouse wheel zooming
+        rotation = event.GetWheelRotation()
+        if rotation != 0:
+            old_zoom = self.zoom
+            if rotation > 0:
+                self.zoom = min(5.0, self.zoom * 1.1)
+            else:
+                self.zoom = max(1.0, self.zoom / 1.1)
+
+            if self.zoom != old_zoom:
+                # Clamp pan percentages if they got out of range under new zoom
+                size = self.GetClientSize()
+                width = max(1, size.width)
+                height = max(1, size.height)
+                visible_width = width / self.zoom
+                visible_height = height / self.zoom
+                max_pan_x = max(0.0, width - visible_width)
+                max_pan_y = max(0.0, height - visible_height)
+
+                self.pan_x = max(0.0, min(self.pan_x, max_pan_x))
+                self.pan_y = max(0.0, min(self.pan_y, max_pan_y))
+                self.pan_x_pct = self.pan_x / max_pan_x if max_pan_x > 0 else 0.0
+                self.pan_y_pct = self.pan_y / max_pan_y if max_pan_y > 0 else 0.0
+
+                self.init = False
+                self.Refresh()
+                if gui:
+                    gui.update_scrollbars()
+
+        # Handle mouse dragging for panning
+        elif event.ButtonDown(wx.MOUSE_BTN_LEFT):
+            self.last_mouse_x, self.last_mouse_y = event.GetPosition()
+        elif event.Dragging() and event.LeftIsDown():
+            curr_x, curr_y = event.GetPosition()
+            dx = curr_x - self.last_mouse_x
+            dy = curr_y - self.last_mouse_y
+            self.last_mouse_x, self.last_mouse_y = curr_x, curr_y
+
+            size = self.GetClientSize()
+            width = max(1, size.width)
+            height = max(1, size.height)
+            visible_width = width / self.zoom
+            visible_height = height / self.zoom
+            max_pan_x = max(0.0, width - visible_width)
+            max_pan_y = max(0.0, height - visible_height)
+
+            gl_dx = (dx / width) * visible_width
+            gl_dy = (dy / height) * visible_height
+
+            new_pan_x = self.pan_x - gl_dx
+            new_pan_y = self.pan_y - gl_dy
+
+            new_pan_x = max(0.0, min(new_pan_x, max_pan_x))
+            new_pan_y = max(0.0, min(new_pan_y, max_pan_y))
+
+            self.pan_x_pct = new_pan_x / max_pan_x if max_pan_x > 0 else 0.0
+            self.pan_y_pct = new_pan_y / max_pan_y if max_pan_y > 0 else 0.0
+
+            self.init = False
+            self.Refresh()
+            if gui:
+                gui.update_scrollbars()
 
     def render_text(self, text, x_pos, y_pos):
         """Handle text drawing operations."""
@@ -264,16 +339,35 @@ class Gui(wx.Frame):
             self.left_pane, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
         )
 
+        # Container panel for canvas and scrollbars
+        self.canvas_panel = wx.Panel(self.splitter)
+
         # Canvas for drawing signals
-        self.canvas = MyGLCanvas(self.splitter, devices, monitors)
+        self.canvas = MyGLCanvas(self.canvas_panel, devices, monitors)
+
+        # Scrollbars
+        self.v_scroll = wx.ScrollBar(self.canvas_panel, style=wx.SB_VERTICAL)
+        self.h_scroll = wx.ScrollBar(self.canvas_panel, style=wx.SB_HORIZONTAL)
+
+        self.v_scroll.Bind(wx.EVT_SCROLL, self.on_v_scroll)
+        self.h_scroll.Bind(wx.EVT_SCROLL, self.on_h_scroll)
+
+        # Arrange canvas and scrollbars like on a document
+        canvas_sizer = wx.GridBagSizer(0, 0)
+        canvas_sizer.Add(self.canvas, pos=(0, 0), flag=wx.EXPAND)
+        canvas_sizer.Add(self.v_scroll, pos=(0, 1), flag=wx.EXPAND)
+        canvas_sizer.Add(self.h_scroll, pos=(1, 0), flag=wx.EXPAND)
+        canvas_sizer.AddGrowableCol(0)
+        canvas_sizer.AddGrowableRow(0)
+        self.canvas_panel.SetSizer(canvas_sizer)
 
         self.top_panel = wx.Panel(self.splitter)
 
         # ── Widgets ──────────────────────────────────────────────────────────
         self.cycles_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000)
-        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "Run")
-        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "Continue")
+        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1))
+        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "▶", size=(32, 28))
+        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "+10", size=(45, 28))
 
         self.switch_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Select switch:")
         self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY,
@@ -290,7 +384,7 @@ class Gui(wx.Frame):
         self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Add Monitor")
         self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Remove Monitor")
 
-        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "Reset")
+        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "↺", size=(32, 28))
 
         self.console = wx.TextCtrl(
             self.top_panel, wx.ID_ANY, "",
@@ -333,9 +427,13 @@ class Gui(wx.Frame):
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Buttons laid out side-by-side
+        sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sim_btn_sizer.Add(self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_sizer.Add(sim_btn_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, 3)
 
         # Switches box
         switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
@@ -360,38 +458,27 @@ class Gui(wx.Frame):
         self.view_box = wx.StaticBox(self.top_panel, label="View Controls")
         self.view_sizer = wx.StaticBoxSizer(self.view_box, wx.VERTICAL)
 
-        view_zoom_label = wx.StaticText(self.top_panel, label="Zoom:")
-        self.view_zoom_slider = wx.Slider(
-            self.top_panel, value=100, minValue=100, maxValue=500,
-            style=wx.SL_HORIZONTAL
-        )
-        self.view_zoom_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
+        self.zoom_label = wx.StaticText(self.top_panel, label="Zoom: 100%")
+        self.zoom_in_btn = wx.Button(self.top_panel, label="Zoom In (+)", size=(-1, 28))
+        self.zoom_out_btn = wx.Button(self.top_panel, label="Zoom Out (-)", size=(-1, 28))
 
-        pan_x_label = wx.StaticText(self.top_panel, label="Pan Horizontal:")
-        self.pan_x_slider = wx.Slider(
-            self.top_panel, value=0, minValue=0, maxValue=100,
-            style=wx.SL_HORIZONTAL
-        )
-        self.pan_x_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
+        self.zoom_in_btn.SetToolTip("Zoom in on the simulation canvas")
+        self.zoom_out_btn.SetToolTip("Zoom out on the simulation canvas")
 
-        pan_y_label = wx.StaticText(self.top_panel, label="Pan Vertical:")
-        self.pan_y_slider = wx.Slider(
-            self.top_panel, value=0, minValue=0, maxValue=100,
-            style=wx.SL_HORIZONTAL
-        )
-        self.pan_y_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
+        self.zoom_in_btn.Bind(wx.EVT_BUTTON, self.on_zoom_in)
+        self.zoom_out_btn.Bind(wx.EVT_BUTTON, self.on_zoom_out)
 
         self.reset_view_btn = wx.Button(self.top_panel, label="Reset View")
         self.reset_view_btn.SetToolTip("Reset zoom and pan to default")
         self.reset_view_btn.Bind(wx.EVT_BUTTON, self.on_reset_view)
 
-        self.view_sizer.Add(view_zoom_label, 0, wx.LEFT | wx.TOP, 5)
-        self.view_sizer.Add(self.view_zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
-        self.view_sizer.Add(pan_x_label, 0, wx.LEFT, 5)
-        self.view_sizer.Add(self.pan_x_slider, 0, wx.EXPAND | wx.ALL, 5)
-        self.view_sizer.Add(pan_y_label, 0, wx.LEFT, 5)
-        self.view_sizer.Add(self.pan_y_slider, 0, wx.EXPAND | wx.ALL, 5)
-        self.view_sizer.Add(self.reset_view_btn, 0, wx.EXPAND | wx.ALL, 5)
+        zoom_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        zoom_btn_sizer.Add(self.zoom_in_btn, 1, wx.ALL, 2)
+        zoom_btn_sizer.Add(self.zoom_out_btn, 1, wx.ALL, 2)
+
+        self.view_sizer.Add(self.zoom_label, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 5)
+        self.view_sizer.Add(zoom_btn_sizer, 0, wx.EXPAND | wx.BOTTOM, 5)
+        self.view_sizer.Add(self.reset_view_btn, 0, wx.EXPAND | wx.ALL, 2)
 
         # Switch ON/OFF buttons side-by-side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -406,7 +493,7 @@ class Gui(wx.Frame):
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas, 240)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 240)
         self.splitter.SetMinimumPaneSize(120)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
@@ -422,6 +509,9 @@ class Gui(wx.Frame):
 
         self.CreateStatusBar()
         self.SetStatusText("Ready")
+
+        # Initialise scrollbar state
+        self.update_scrollbars()
 
         # Load the initial file into the viewer if one was provided
         if path:
@@ -584,6 +674,7 @@ class Gui(wx.Frame):
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
+        self.continue_button.SetLabel(f"+{spin_value}")
         text = "".join(["New spin control value: ", str(spin_value)])
         self.canvas.render(text)
         self.log(text)
@@ -644,19 +735,86 @@ class Gui(wx.Frame):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.console.AppendText(f"[{timestamp}] {message}\n")
 
-    def on_view_slider(self, event):
-        """Handle updates from any of the three view control sliders."""
-        self.canvas.zoom = self.view_zoom_slider.GetValue() / 100.0
-        self.canvas.pan_x_pct = self.pan_x_slider.GetValue() / 100.0
-        self.canvas.pan_y_pct = self.pan_y_slider.GetValue() / 100.0
+    def on_h_scroll(self, event):
+        """Handle horizontal scrollbar scrolling."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        scrollable_x = range_max - thumb_size
+        
+        if scrollable_x > 0:
+            pos = self.h_scroll.GetThumbPosition()
+            self.canvas.pan_x_pct = pos / scrollable_x
+        else:
+            self.canvas.pan_x_pct = 0.0
+            
         self.canvas.init = False
         self.canvas.Refresh()
 
+    def on_v_scroll(self, event):
+        """Handle vertical scrollbar scrolling."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        scrollable_y = range_max - thumb_size
+        
+        if scrollable_y > 0:
+            pos = self.v_scroll.GetThumbPosition()
+            self.canvas.pan_y_pct = pos / scrollable_y
+        else:
+            self.canvas.pan_y_pct = 0.0
+            
+        self.canvas.init = False
+        self.canvas.Refresh()
+
+    def on_zoom_in(self, event):
+        """Zoom in by 10%."""
+        self.canvas.zoom = min(5.0, self.canvas.zoom * 1.1)
+        self.update_canvas_after_zoom()
+
+    def on_zoom_out(self, event):
+        """Zoom out by 10%."""
+        self.canvas.zoom = max(1.0, self.canvas.zoom / 1.1)
+        self.update_canvas_after_zoom()
+
+    def update_canvas_after_zoom(self):
+        """Refresh canvas and update scrollbars after zoom factor changes."""
+        self.canvas.init = False
+        self.canvas.Refresh()
+        self.update_scrollbars()
+
+    def update_scrollbars(self):
+        """Update scrollbar ranges, thumb sizes, and positions based on canvas state."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        pan_x_pct = getattr(self.canvas, 'pan_x_pct', 0.0)
+        pan_y_pct = getattr(self.canvas, 'pan_y_pct', 0.0)
+
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        
+        scrollable_x = range_max - thumb_size
+        scrollable_y = range_max - thumb_size
+        
+        pos_x = int(pan_x_pct * scrollable_x) if scrollable_x > 0 else 0
+        pos_y = int(pan_y_pct * scrollable_y) if scrollable_y > 0 else 0
+        
+        page_size = thumb_size
+
+        self.h_scroll.SetScrollbar(pos_x, thumb_size, range_max, page_size, refresh=True)
+        self.v_scroll.SetScrollbar(pos_y, thumb_size, range_max, page_size, refresh=True)
+        
+        if hasattr(self, 'zoom_label'):
+            self.zoom_label.SetLabel(f"Zoom: {int(zoom * 100)}%")
+
     def on_reset_view(self, event):
-        """Reset all view adjustment sliders back to default and refresh canvas."""
-        self.view_zoom_slider.SetValue(100)
-        self.pan_x_slider.SetValue(0)
-        self.pan_y_slider.SetValue(0)
-        self.on_view_slider(None)
+        """Reset all view parameters back to defaults and refresh canvas."""
+        self.canvas.zoom = 1.0
+        self.canvas.pan_x_pct = 0.0
+        self.canvas.pan_y_pct = 0.0
+        self.canvas.pan_x = 0.0
+        self.canvas.pan_y = 0.0
+        self.canvas.init = False
+        self.canvas.Refresh()
+        self.update_scrollbars()
         self.SetStatusText("View reset to default dimensions.")
         self.log("View reset to default dimensions.")
