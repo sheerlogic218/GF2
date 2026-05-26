@@ -323,7 +323,7 @@ class Gui(wx.Frame):
         self.outer_splitter = wx.SplitterWindow(
             self, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
         )
-        self.outer_splitter.SetMinimumPaneSize(220)
+        self.outer_splitter.SetMinimumPaneSize(200)
 
         # Left pane wraps the existing horizontal (controls / canvas) layout
         self.left_pane = wx.Panel(self.outer_splitter)
@@ -497,7 +497,7 @@ class Gui(wx.Frame):
 
         # ── Inner splitter split ─────────────────────────────────────────────
         self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
-        self.splitter.SetMinimumPaneSize(120)
+        self.splitter.SetMinimumPaneSize(145)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
         left_sizer = wx.BoxSizer(wx.VERTICAL)
