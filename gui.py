@@ -312,11 +312,6 @@ class Gui(wx.Frame):
         self.remove_monitor_btn.SetToolTip("Remove the selected monitor")
         self.spin.SetToolTip("Number of cycles to run or continue")
 
-        # Button colours
-        self.run_button.SetBackgroundColour(wx.Colour(100, 200, 100))
-        self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100))
-        self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200))
-
         # ── Event bindings ───────────────────────────────────────────────────
         self.Bind(wx.EVT_MENU, self.on_menu)
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
@@ -450,17 +445,22 @@ class Gui(wx.Frame):
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
         self._viewer_title.SetFont(title_font)
 
+        save_btn = wx.Button(self.viewer_panel, label="Save", size=(50, 28))
+        save_btn.SetToolTip("Save changes to file")
+        save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
+
         close_btn = wx.Button(self.viewer_panel, label="X", size=(28, 28))
         close_btn.SetToolTip("Close file viewer")
         close_btn.Bind(wx.EVT_BUTTON, self._on_close_viewer)
 
         header_sizer.Add(self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6)
+        header_sizer.Add(save_btn, 0, wx.ALL, 2)
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
 
         # Read-only text area with monospace font
         self._file_text = wx.TextCtrl(
             self.viewer_panel,
-            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP | wx.HSCROLL
+            style=wx.TE_MULTILINE | wx.TE_DONTWRAP | wx.HSCROLL
         )
         mono_font = wx.Font(
             10, wx.FONTFAMILY_TELETYPE,
@@ -510,8 +510,27 @@ class Gui(wx.Frame):
             self._viewer_menu_item.Check(False)
             self.SetStatusText("File viewer closed.")
 
+    def _on_save_viewer(self, event):
+        """Save the current contents of the file viewer back to disk."""
+        if not self._viewer_path:
+            wx.MessageBox(
+                "No file is open — nothing to save.",
+                "Save", wx.ICON_WARNING | wx.OK
+            )
+            return
+        try:
+            with open(self._viewer_path, "w") as fh:
+                fh.write(self._file_text.GetValue())
+            self.SetStatusText(f"Saved: {self._viewer_path}")
+            self.log(f"File saved: {self._viewer_path}")
+        except OSError as exc:
+            wx.MessageBox(
+                f"Could not save file:\n{exc}",
+                "Save Error", wx.ICON_ERROR | wx.OK
+            )
+
     def _on_close_viewer(self, event):
-        """Handle the ✕ button inside the viewer panel."""
+        """Handle the X button inside the viewer panel."""
         self._hide_viewer()
 
     # ── Menu ─────────────────────────────────────────────────────────────────
@@ -529,6 +548,9 @@ class Gui(wx.Frame):
                 "About Logic Simulator",
                 wx.ICON_INFORMATION | wx.OK,
             )
+
+        elif Id == wx.ID_SAVE:
+            self._on_save_viewer(event)
 
         elif Id == wx.ID_OPEN:
             wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
