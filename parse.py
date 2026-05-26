@@ -8,6 +8,7 @@ Classes
 -------
 Parser - parses the definition file and builds the logic network.
 """
+from scanner import Scanner, Symbol
 
 
 class Parser:
@@ -35,10 +36,30 @@ class Parser:
     def __init__(self, names, devices, network, monitors, scanner):
         """Initialise constants."""
 
+        self.names = names
+        self.devices = devices
+        self.network = network
+        self.monitors = monitors
+        self.scanner = scanner
+
+    def generate_symbols(self):
+        symbols = []
+        current_symbol = self.scanner.get_symbol()
+        while current_symbol.type != Symbol.EOF:
+            symbols.append(current_symbol)
+            current_symbol = self.scanner.get_symbol()
+        return symbols
+
+
     def parse_network(self):
         """Parse the circuit definition file."""
         # For now just return True, so that userint and gui can run in the
         # skeleton code. When complete, should return False when there are
         # errors in the circuit definition file.
-        """I assume this is where scanner gets run on the file, i.e we get the path """
+        """I assume this is where scanner gets run on the file, i.e we get the path."""
+        symbols = self.generate_symbols()
+        print(symbols)
+
+
+
         return True

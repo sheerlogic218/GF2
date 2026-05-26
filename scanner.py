@@ -110,9 +110,19 @@ class Scanner:
         while self.get_current_char().isspace():
             self.advance()
 
+    def skip_comments(self) -> None:
+        """Skip comments."""
+        if self.get_current_char() + self.get_next_char() == "//":
+            while self.get_current_char() != "\n":
+                self.advance()
+            self.advance()
+
+
+
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
         self.skip_whitespace()
+        self.skip_comments()
 
         symbol = Symbol()
         symbol.line = self.line_count
@@ -163,48 +173,10 @@ class Scanner:
             self.advance()
             return symbol
 
-        # if (
-        #     char == "-"
-        #     and self.ptr + 1 < len(self.text)
-        #     and self.text[self.ptr + 1] == ">"
-        # ):
-        #     symbol.type = Symbol.PUNCTUATION
-        #     symbol.text = "->"
-        #     [symbol.id] = self.names.lookup([symbol.text])
-        #     self.advance()
-        #     self.advance()
-        #     return symbol
-        #
-        # if (
-        #     char == "<"
-        #     and self.ptr + 1 < len(self.text)
-        #     and self.text[self.ptr + 1] == "="
-        # ):
-        #     symbol.type = Symbol.PUNCTUATION
-        #     symbol.text = "<="
-        #     [symbol.id] = self.names.lookup([symbol.text])
-        #     self.advance()
-        #     self.advance()
-        #     return symbol
-
-        if char in "=+*^!,.;:[]()":
+        if char in "=+*^!,.;:[]() ":
             symbol.type = Symbol.PUNCTUATION
             symbol.text = char
             self.advance()
             return symbol
 
-        raise SyntaxError(f"Invalid character {char}")
-
-    # def group_brackets(self, val: str):
-    #     re_exp = re.compile(r"(\([a-zA-Z0-9+*^! ]*\))")
-    #     return re.split(re_exp, val)
-    #
-    # def expression(self, line: str):
-    #     """Process an expression line."""
-    #     parts = line.split("=")
-    #     if len(parts) != 2:
-    #         raise SyntaxError(f"Invalid expression line: {line}")
-    #     var = parts[0].strip()
-    #     val = parts[1].strip()
-    #
-    #     # check there are no variables beginning with strings
+        raise SyntaxError(f"Invalid character {ord(char)}")
