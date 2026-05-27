@@ -9,6 +9,7 @@ MyGLCanvas - handles all canvas drawing operations.
 Gui - configures the main window and all the widgets.
 """
 
+from numpy import size
 import wx
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
@@ -60,6 +61,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
         self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+        self.Bind(wx.EVT_RIGHT_DOWN, self.on_right_click)
 
     def init_gl(self):
         """Configure and initialise the OpenGL context and camera."""
@@ -198,18 +200,19 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle canvas resize events cleanly without duplicating ortho configurations."""
         self.init = False
         self.Refresh()
-        
+    
         # Notify Gui to update scrollbars on resize
         gui = self.GetParent()
         while gui and not hasattr(gui, 'update_scrollbars'):
             gui = gui.GetParent()
         if gui:
             gui.update_scrollbars()
-        if event.Entering():
-            self.SetFocus()
 
     def on_mouse(self, event):
         """Handle mouse events (navigation handled by scrollbars and mouse wheel/dragging)."""
+
+        if event.Entering():
+            self.SetFocus()
         # Find the parent Gui frame to trigger scrollbar updates
         gui = self.GetParent()
         while gui and not hasattr(gui, 'update_scrollbars'):
@@ -277,6 +280,51 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.Refresh()
             if gui:
                 gui.update_scrollbars()
+    
+    def on_right_click(self, event):
+        """Show a context menu on right click."""
+        menu = wx.Menu()
+        reset_item = menu.Append(wx.ID_ANY, "Reset View")
+        menu.AppendSeparator()
+        save_item = menu.Append(wx.ID_ANY, "Save Image...")
+        copy_item = menu.Append(wx.ID_ANY, "Copy Image")
+
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'on_reset_view'):
+            gui = gui.GetParent()
+        if gui:
+            self.Bind(wx.EVT_MENU, gui.on_reset_view, reset_item)
+
+        self.Bind(wx.EVT_MENU, self.on_save_image, save_item)
+        self.Bind(wx.EVT_MENU, self.on_copy_image, copy_item)
+
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _capture_bitmap(self):
+        """Capture the current canvas contents as a wx.Bitmap."""
+        size = self.GetClientSize()
+        bitmap = wx.Bitmap(size.width, size.height)
+        dc = wx.MemoryDC(bitmap)
+        dc.Blit(0, 0, size.width, size.height,wx.ClientDC(self), 0, 0)
+        dc.SelectObject(wx.NullBitmap)
+        return bitmap
+
+    def on_save_image(self, event):
+        """Save the canvas contents to an image file."""
+        wildcard = "PNG files (*.png)|*.png|JPEG files (*.jpg)|*.jpg"
+        dlg = wx.FileDialog(self, "Save Image", wildcard=wildcard,style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        if dlg.ShowModal() == wx.ID_OK:
+            path = dlg.GetPath()
+            fmt = wx.BITMAP_TYPE_JPEG if path.endswith(".jpg") else wx.BITMAP_TYPE_PNG
+            self._capture_bitmap().SaveFile(path, fmt)
+        dlg.Destroy()
+
+    def on_copy_image(self, event):
+        """Copy the canvas contents to the clipboard."""
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(wx.BitmapDataObject(self._capture_bitmap()))
+            wx.TheClipboard.Close()
 
     def render_text(self, text, x_pos, y_pos):
         """Handle text drawing operations."""
