@@ -461,9 +461,10 @@ class Gui(wx.Frame):
         )
         self.console.SetFont(console_font)
 
-        # Tooltips
-        self.run_button.SetToolTip("Run the simulation from scratch for N cycles")
-        self.continue_button.SetToolTip("Continue the simulation for N additional cycles")
+        # Tooltips# Tooltips
+        initial_cycles = self.spin.GetValue()
+        self.run_button.SetToolTip(f"Run the simulation from scratch for {initial_cycles} cycles")
+        self.continue_button.SetToolTip(f"Continue the simulation for {initial_cycles} additional cycles")
         self.reset_button.SetToolTip("Reset the simulation to its initial state")
         self.switch_on.SetToolTip("Set the selected switch to ON (1)")
         self.switch_off.SetToolTip("Set the selected switch to OFF (0)")
@@ -715,7 +716,14 @@ class Gui(wx.Frame):
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
+        
+        # Update button label
         self.continue_button.SetLabel(f"+{spin_value}")
+        
+        # Update tooltips dynamically
+        self.run_button.SetToolTip(f"Run the simulation from scratch for {spin_value} cycles")
+        self.continue_button.SetToolTip(f"Continue the simulation for {spin_value} additional cycles")
+        
         text = "".join(["New spin control value: ", str(spin_value)])
         self.canvas.render(text)
         self.log(text)
