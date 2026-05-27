@@ -59,6 +59,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
     def init_gl(self):
         """Configure and initialise the OpenGL context and camera."""
@@ -204,6 +205,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             gui = gui.GetParent()
         if gui:
             gui.update_scrollbars()
+        if event.Entering():
+            self.SetFocus()
 
     def on_mouse(self, event):
         """Handle mouse events (navigation handled by scrollbars and mouse wheel/dragging)."""
@@ -287,6 +290,20 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glRasterPos2f(x_pos, y_pos)
             else:
                 GLUT.glutBitmapCharacter(font, ord(character))
+    
+    def on_key_down(self, event):
+        """Zoom in/out with Ctrl+= or Ctrl+- when canvas has focus."""
+        if event.ControlDown():
+            key = event.GetKeyCode()
+            gui = self.GetParent()
+            while gui and not hasattr(gui, 'on_zoom_in'):
+                gui = gui.GetParent()
+            if gui:
+                if key in (wx.WXK_NUMPAD_ADD, ord("="), ord("+")):
+                    gui.on_zoom_in(None)
+                elif key in (wx.WXK_NUMPAD_SUBTRACT, ord("-")):
+                    gui.on_zoom_out(None)
+        event.Skip()
 
 
 class Gui(wx.Frame):
@@ -821,3 +838,6 @@ class Gui(wx.Frame):
         self.update_scrollbars()
         self.SetStatusText("View reset to default dimensions.")
         self.log("View reset to default dimensions.")
+
+    
+    
