@@ -522,32 +522,6 @@ class Gui(wx.Frame):
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
 
-        # View controls box
-        self.view_box = wx.StaticBox(self.top_panel, label="View Controls")
-        self.view_sizer = wx.StaticBoxSizer(self.view_box, wx.VERTICAL)
-
-        self.zoom_label = wx.StaticText(self.top_panel, label="Zoom: 100%")
-        self.zoom_in_btn = wx.Button(self.top_panel, label="Zoom In (+)", size=(-1, 28))
-        self.zoom_out_btn = wx.Button(self.top_panel, label="Zoom Out (-)", size=(-1, 28))
-
-        self.zoom_in_btn.SetToolTip("Zoom in on the simulation canvas")
-        self.zoom_out_btn.SetToolTip("Zoom out on the simulation canvas")
-
-        self.zoom_in_btn.Bind(wx.EVT_BUTTON, self.on_zoom_in)
-        self.zoom_out_btn.Bind(wx.EVT_BUTTON, self.on_zoom_out)
-
-        self.reset_view_btn = wx.Button(self.top_panel, label="Reset View")
-        self.reset_view_btn.SetToolTip("Reset zoom and pan to default")
-        self.reset_view_btn.Bind(wx.EVT_BUTTON, self.on_reset_view)
-
-        zoom_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        zoom_btn_sizer.Add(self.zoom_in_btn, 1, wx.ALL, 2)
-        zoom_btn_sizer.Add(self.zoom_out_btn, 1, wx.ALL, 2)
-
-        self.view_sizer.Add(self.zoom_label, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 5)
-        self.view_sizer.Add(zoom_btn_sizer, 0, wx.EXPAND | wx.BOTTOM, 5)
-        self.view_sizer.Add(self.reset_view_btn, 0, wx.EXPAND | wx.ALL, 2)
-
         # Switch ON/OFF buttons side-by-side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
@@ -557,7 +531,6 @@ class Gui(wx.Frame):
         top_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        top_sizer.Add(self.view_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
 
         # ── Inner splitter split ─────────────────────────────────────────────
@@ -871,8 +844,6 @@ class Gui(wx.Frame):
         self.h_scroll.SetScrollbar(pos_x, thumb_size, range_max, page_size, refresh=True)
         self.v_scroll.SetScrollbar(pos_y, thumb_size, range_max, page_size, refresh=True)
         
-        if hasattr(self, 'zoom_label'):
-            self.zoom_label.SetLabel(f"Zoom: {int(zoom * 100)}%")
 
     def on_reset_view(self, event):
         """Reset all view parameters back to defaults and refresh canvas."""
