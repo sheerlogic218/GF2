@@ -265,6 +265,7 @@ class Devices:
 
     def make_gate(self, device_id, device_kind, no_of_inputs: int):
         """Make logic gates with the specified number of inputs."""
+        # I DISLIKE, CHANGE TO INPUT CUSTOM INPUT ID
         self.add_device(device_id, device_kind)
         self.add_output(device_id, output_id=None)
 

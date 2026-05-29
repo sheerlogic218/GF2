@@ -10,6 +10,8 @@ Parser - parses the definition file and builds the logic network.
 """
 import uuid
 
+from devices import Devices
+from names import Names
 from scanner import Scanner, Symbol
 
 
@@ -170,7 +172,11 @@ class Parser:
             self.expect(Symbol.PUNCTUATION, "=")
             if self.symbol.type == Symbol.NUMBER and self.symbol.text in ["0", "1"]:
                 # Valid, add device
-                print(self.devices.make_device(uuid.uuid4(),self.devices.SWITCH, int(self.symbol.text)))
+                id = uuid.uuid4()
+                self.devices.make_device(id, self.devices.SWITCH, int(self.symbol.text))
+                switch = self.devices.get_device(id)
+                device_type = self.names.inv_name_IDS[switch.device_kind]
+                print(f"DEVICE {device_type}")
                 self.next_symbol()
             else:
                 print("Syntax Error: Expected 0 or 1 for switch state")
@@ -200,19 +206,49 @@ class Parser:
         self.parse_or_expr()
 
     def parse_or_expr(self):
-        self.parse_and_expr()
+        or_inputs = [self.parse_and_expr()]
         while self.accept(Symbol.PUNCTUATION, "+"):
-            self.parse_and_expr()
+            or_inputs.append(self.parse_and_expr())
+
+        if len(or_inputs) == 1:
+            return or_inputs[0]
+
+        or_gate_id = uuid.uuid4()
+        self.devices.make_device(or_gate_id,self.devices.OR, len(or_inputs))
+        or_gate = self.devices.get_device(or_gate_id)
+        print(f"OR GATE {or_gate}")
+        return or_gate
 
     def parse_and_expr(self):
-        self.parse_xor_expr()
+        and_inputs = [self.parse_xor_expr()]
         while self.accept(Symbol.PUNCTUATION, "*"):
-            self.parse_xor_expr()
+            and_inputs.append(self.parse_xor_expr())
+
+        if len(and_inputs) == 1:
+            return and_inputs[0]
+
+        and_gate_id = uuid.uuid4()
+        self.devices.make_device(and_gate_id,self.devices.AND, len(and_inputs))
+        and_gate = self.devices.get_device(and_gate_id)
+        print(f"AND GATE {and_gate}")
+        print(f"AND GATE INPUTS {and_inputs}")
+        return and_gate
+
+
 
     def parse_xor_expr(self):
-        self.parse_factor()
+        xor_inputs = [self.parse_factor()]
         while self.accept(Symbol.PUNCTUATION, "^"):
-            self.parse_factor()
+            xor_inputs.append(self.parse_factor())
+
+        if len(xor_inputs) == 1:
+            return xor_inputs[0]
+
+        xor_gate_id = uuid.uuid4()
+        self.devices.make_device(xor_gate_id,self.devices.XOR, len(xor_inputs))
+        xor_gate = self.devices.get_device(xor_gate_id)
+        print(f"XOR GATE {xor_gate}")
+        return xor_gate
 
     def parse_factor(self):
         self.accept(Symbol.PUNCTUATION, "!")
