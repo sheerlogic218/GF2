@@ -8,6 +8,7 @@ Classes
 -------
 Parser - parses the definition file and builds the logic network.
 """
+import uuid
 
 from scanner import Scanner, Symbol
 
@@ -46,6 +47,7 @@ class Parser:
         self.error_count = 0
 
     def generate_symbols(self):
+        """Deprecated."""
         symbols = []
         current_symbol = self.scanner.get_symbol()
         while current_symbol.type != Symbol.EOF:
@@ -143,7 +145,7 @@ class Parser:
             else:
                 self.parse_assignment()
         else:
-            print(f"Syntax Error: invalid statement starting with '{self.symbol.text}'")
+            print(f"Syntax Error: invalid statement starting with '{self.symbol.text}' at {self.scanner.line_position},{self.scanner.line_count}")
             self.error_count += 1
             self.next_symbol()
 
@@ -164,8 +166,11 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "switch"):
             self.expect(Symbol.NAME)
+            name = self.symbol.text
             self.expect(Symbol.PUNCTUATION, "=")
             if self.symbol.type == Symbol.NUMBER and self.symbol.text in ["0", "1"]:
+                # Valid, add device
+                print(self.devices.make_device(uuid.uuid4(),self.devices.SWITCH, int(self.symbol.text)))
                 self.next_symbol()
             else:
                 print("Syntax Error: Expected 0 or 1 for switch state")
@@ -221,6 +226,7 @@ class Parser:
     def parse_signal_or_port_ref(self):
         self.expect(Symbol.NAME)
 
+        # Port
         if self.accept(Symbol.PUNCTUATION, "."):
             valid_ports = ["CLK", "DATA", "SET", "CLEAR", "Q", "QBAR"]
             if self.symbol.type == Symbol.NAME and self.symbol.text in valid_ports:
@@ -229,6 +235,7 @@ class Parser:
                 print(f"Syntax Error: Expected valid port_name, got {self.symbol.text}")
                 self.error_count += 1
 
+        # Signal
         elif self.accept(Symbol.PUNCTUATION, "["):
             self.expect(Symbol.NUMBER)
             if self.accept(Symbol.PUNCTUATION, ":"):

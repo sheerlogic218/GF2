@@ -1,5 +1,5 @@
 module bus_test : in_bus[4] -> out_bus[4] ;
- 
+
     wire bus_a [4] ;
     wire out_bus [4] ;
  

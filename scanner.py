@@ -116,12 +116,18 @@ class Scanner:
         if self.get_current_char() + self.get_next_char() == "//":
             while self.get_current_char() != "\n":
                 self.advance()
+            print(self.get_current_char())
             self.advance()
+
+    def skip_whitespace_and_comments(self) -> None:
+        while self.get_current_char() + self.get_next_char() == "//" or self.get_current_char().isspace():
+            self.skip_whitespace()
+            self.skip_comments()
+
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
-        self.skip_whitespace()
-        self.skip_comments()
+        self.skip_whitespace_and_comments()
 
         symbol = Symbol()
         symbol.line = self.line_count

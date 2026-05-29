@@ -9,8 +9,7 @@ MyGLCanvas - handles all canvas drawing operations.
 Gui - configures the main window and all the widgets.
 """
 
-
-
+from numpy import size
 import wx
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
@@ -21,6 +20,9 @@ from network import Network
 from monitors import Monitors
 from scanner import Scanner
 from parse import Parser
+
+# Custom menu ID for the file viewer toggle
+ID_TOGGLE_VIEWER = wx.NewIdRef()
 
 
 class MyGLCanvas(wxcanvas.GLCanvas):
@@ -46,50 +48,49 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         # Initialise variables for panning
         self.pan_x = 0
         self.pan_y = 0
+        self.pan_x_pct = 0.0
+        self.pan_y_pct = 0.0
         self.last_mouse_x = 0  # previous mouse x position
         self.last_mouse_y = 0  # previous mouse y position
 
         # Initialise variables for zooming
-        self.zoom = 1
+        self.zoom = 1.0
 
         # Bind events to the canvas
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+        self.Bind(wx.EVT_RIGHT_DOWN, self.on_right_click)
 
     def init_gl(self):
         """Configure and initialise the OpenGL context and camera."""
         size = self.GetClientSize()
         width = max(1, size.width)
         height = max(1, size.height)
-        
+
         GL.glViewport(0, 0, width, height)
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
-        
-        # Grab slider values (defaulting to 1.0 zoom and 0% pan)
+
         zoom_factor = getattr(self, 'zoom', 1.0)
         pan_x_pct = getattr(self, 'pan_x_pct', 0.0)
         pan_y_pct = getattr(self, 'pan_y_pct', 0.0)
-        
-        # Calculate exactly how many coordinate pixels are currently visible
+
         visible_width = width / zoom_factor
         visible_height = height / zoom_factor
-        
-        # Calculate the maximum amount of hidden physical space we are allowed to pan across
+
         max_pan_x = max(0.0, width - visible_width)
         max_pan_y = max(0.0, height - visible_height)
-        
-        # Apply the slider percentage to that available space
+
         self.pan_x = max_pan_x * pan_x_pct
         self.pan_y = max_pan_y * pan_y_pct
-        
-        # Camera boundaries (Y=0 is top, Y=height is bottom)
+
         left = self.pan_x
         right = self.pan_x + visible_width
         bottom = self.pan_y + visible_height
         top = self.pan_y
-        
+
         GL.glOrtho(left, right, bottom, top, -1, 1)
         GL.glMatrixMode(GL.GL_MODELVIEW)
         GL.glLoadIdentity()
@@ -107,25 +108,23 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         canvas_width = size.width
         canvas_height = size.height
 
-        # Grid is fixed in physical coordinates!
-        box_x_start = 60
+        box_x_start = 80
         box_x_end = canvas_width - 40
-        
+
         box_y_bot = 20
         box_y_top = canvas_height - 20
-        
-        # Correctly mapping High (top) and Low (bottom)
+
         high_y = box_y_bot + (box_y_top - box_y_bot) * 0.25
         low_y = box_y_bot + (box_y_top - box_y_bot) * 0.75
-        
+
         num_cycles = 10
-        cycle_width = (box_x_end - box_x_start) / num_cycles 
+        cycle_width = (box_x_end - box_x_start) / num_cycles
 
-        # --- DRAW Y-AXIS LABELS (Pinned to pan_x so they act as a HUD) ---
-        self.render_text("High", getattr(self, 'pan_x', 0) + 15, high_y - 4)
-        self.render_text("Low", getattr(self, 'pan_x', 0) + 20, low_y - 4)
+        hud_x_position = self.pan_x + 20
 
-        # --- DRAW BOUNDING BOX ---
+        self.render_text("High", hud_x_position, high_y - 4)
+        self.render_text("Low", hud_x_position, low_y - 4)
+
         GL.glColor3f(0.3, 0.4, 0.5)
         GL.glLineWidth(1.5)
         GL.glBegin(GL.GL_LINE_LOOP)
@@ -135,7 +134,18 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
-        # --- DRAW CLOCK CYCLES ---
+        GL.glEnable(GL.GL_LINE_STIPPLE)
+        GL.glLineStipple(1, 0x00FF)
+        GL.glColor3f(0.4, 0.4, 0.4)
+        GL.glLineWidth(1.0)
+        GL.glBegin(GL.GL_LINES)
+        GL.glVertex2f(box_x_start, high_y)
+        GL.glVertex2f(box_x_end, high_y)
+        GL.glVertex2f(box_x_start, low_y)
+        GL.glVertex2f(box_x_end, low_y)
+        GL.glEnd()
+        GL.glDisable(GL.GL_LINE_STIPPLE)
+
         GL.glEnable(GL.GL_LINE_STIPPLE)
         GL.glLineStipple(1, 0x00FF)
         GL.glColor3f(0.2, 0.3, 0.4)
@@ -147,7 +157,6 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glEnd()
         GL.glDisable(GL.GL_LINE_STIPPLE)
 
-        # --- DRAW DYNAMIC SIGNAL TRACE ---
         GL.glColor3f(0.0, 1.0, 0.4)
         GL.glLineWidth(2.5)
         GL.glBegin(GL.GL_LINE_STRIP)
@@ -155,10 +164,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             x = box_x_start + (i * cycle_width)
             x_next = box_x_start + ((i + 1) * cycle_width)
             current_y = high_y if i % 2 == 0 else low_y
-            
+
             GL.glVertex2f(x, current_y)
             GL.glVertex2f(x_next, current_y)
-            
+
             if i < num_cycles - 1:
                 next_y = low_y if i % 2 == 0 else high_y
                 GL.glVertex2f(x_next, current_y)
@@ -168,6 +177,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         GL.glFlush()
         self.SwapBuffers()
+
     def on_paint(self, event):
         """Handle the paint event."""
         self.SetCurrent(self.context)
@@ -188,16 +198,137 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
     def on_size(self, event):
         """Handle canvas resize events cleanly without duplicating ortho configurations."""
-        self.init = False 
+        self.init = False
         self.Refresh()
+    
+        # Notify Gui to update scrollbars on resize
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'update_scrollbars'):
+            gui = gui.GetParent()
+        if gui:
+            gui.update_scrollbars()
 
     def on_mouse(self, event):
-        #removing mouse handling in favour of sliders
-        pass
+        """Handle mouse events (navigation handled by scrollbars and mouse wheel/dragging)."""
+
+        if event.Entering():
+            self.SetFocus()
+        # Find the parent Gui frame to trigger scrollbar updates
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'update_scrollbars'):
+            gui = gui.GetParent()
+
+        # Handle mouse wheel zooming
+        rotation = event.GetWheelRotation()
+        if rotation != 0:
+            old_zoom = self.zoom
+            if rotation > 0:
+                self.zoom = min(5.0, self.zoom * 1.1)
+            else:
+                self.zoom = max(1.0, self.zoom / 1.1)
+
+            if self.zoom != old_zoom:
+                # Clamp pan percentages if they got out of range under new zoom
+                size = self.GetClientSize()
+                width = max(1, size.width)
+                height = max(1, size.height)
+                visible_width = width / self.zoom
+                visible_height = height / self.zoom
+                max_pan_x = max(0.0, width - visible_width)
+                max_pan_y = max(0.0, height - visible_height)
+
+                self.pan_x = max(0.0, min(self.pan_x, max_pan_x))
+                self.pan_y = max(0.0, min(self.pan_y, max_pan_y))
+                self.pan_x_pct = self.pan_x / max_pan_x if max_pan_x > 0 else 0.0
+                self.pan_y_pct = self.pan_y / max_pan_y if max_pan_y > 0 else 0.0
+
+                self.init = False
+                self.Refresh()
+                if gui:
+                    gui.update_scrollbars()
+
+        # Handle mouse dragging for panning
+        elif event.ButtonDown(wx.MOUSE_BTN_LEFT):
+            self.last_mouse_x, self.last_mouse_y = event.GetPosition()
+        elif event.Dragging() and event.LeftIsDown():
+            curr_x, curr_y = event.GetPosition()
+            dx = curr_x - self.last_mouse_x
+            dy = curr_y - self.last_mouse_y
+            self.last_mouse_x, self.last_mouse_y = curr_x, curr_y
+
+            size = self.GetClientSize()
+            width = max(1, size.width)
+            height = max(1, size.height)
+            visible_width = width / self.zoom
+            visible_height = height / self.zoom
+            max_pan_x = max(0.0, width - visible_width)
+            max_pan_y = max(0.0, height - visible_height)
+
+            gl_dx = (dx / width) * visible_width
+            gl_dy = (dy / height) * visible_height
+
+            new_pan_x = self.pan_x - gl_dx
+            new_pan_y = self.pan_y - gl_dy
+
+            new_pan_x = max(0.0, min(new_pan_x, max_pan_x))
+            new_pan_y = max(0.0, min(new_pan_y, max_pan_y))
+
+            self.pan_x_pct = new_pan_x / max_pan_x if max_pan_x > 0 else 0.0
+            self.pan_y_pct = new_pan_y / max_pan_y if max_pan_y > 0 else 0.0
+
+            self.init = False
+            self.Refresh()
+            if gui:
+                gui.update_scrollbars()
+    
+    def on_right_click(self, event):
+        """Show a context menu on right click."""
+        menu = wx.Menu()
+        reset_item = menu.Append(wx.ID_ANY, "Reset View")
+        menu.AppendSeparator()
+        save_item = menu.Append(wx.ID_ANY, "Save Image...")
+        copy_item = menu.Append(wx.ID_ANY, "Copy Image")
+
+        gui = self.GetParent()
+        while gui and not hasattr(gui, 'on_reset_view'):
+            gui = gui.GetParent()
+        if gui:
+            self.Bind(wx.EVT_MENU, gui.on_reset_view, reset_item)
+
+        self.Bind(wx.EVT_MENU, self.on_save_image, save_item)
+        self.Bind(wx.EVT_MENU, self.on_copy_image, copy_item)
+
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _capture_bitmap(self):
+        """Capture the current canvas contents as a wx.Bitmap."""
+        size = self.GetClientSize()
+        bitmap = wx.Bitmap(size.width, size.height)
+        dc = wx.MemoryDC(bitmap)
+        dc.Blit(0, 0, size.width, size.height,wx.ClientDC(self), 0, 0)
+        dc.SelectObject(wx.NullBitmap)
+        return bitmap
+
+    def on_save_image(self, event):
+        """Save the canvas contents to an image file."""
+        wildcard = "PNG files (*.png)|*.png|JPEG files (*.jpg)|*.jpg"
+        dlg = wx.FileDialog(self, "Save Image", wildcard=wildcard,style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        if dlg.ShowModal() == wx.ID_OK:
+            path = dlg.GetPath()
+            fmt = wx.BITMAP_TYPE_JPEG if path.endswith(".jpg") else wx.BITMAP_TYPE_PNG
+            self._capture_bitmap().SaveFile(path, fmt)
+        dlg.Destroy()
+
+    def on_copy_image(self, event):
+        """Copy the canvas contents to the clipboard."""
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(wx.BitmapDataObject(self._capture_bitmap()))
+            wx.TheClipboard.Close()
 
     def render_text(self, text, x_pos, y_pos):
         """Handle text drawing operations."""
-        GL.glColor3f(1.0, 1.0, 1.0)  # Text is now white for visibility
+        GL.glColor3f(1.0, 1.0, 1.0)
         GL.glRasterPos2f(x_pos, y_pos)
         font = GLUT.GLUT_BITMAP_HELVETICA_12
 
@@ -207,6 +338,20 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glRasterPos2f(x_pos, y_pos)
             else:
                 GLUT.glutBitmapCharacter(font, ord(character))
+    
+    def on_key_down(self, event):
+        """Zoom in/out with Ctrl+= or Ctrl+- when canvas has focus."""
+        if event.ControlDown():
+            key = event.GetKeyCode()
+            gui = self.GetParent()
+            while gui and not hasattr(gui, 'on_zoom_in'):
+                gui = gui.GetParent()
+            if gui:
+                if key in (wx.WXK_NUMPAD_ADD, ord("="), ord("+")):
+                    gui.on_zoom_in(None)
+                elif key in (wx.WXK_NUMPAD_SUBTRACT, ord("-")):
+                    gui.on_zoom_out(None)
+        event.Skip()
 
 
 class Gui(wx.Frame):
@@ -214,50 +359,109 @@ class Gui(wx.Frame):
 
     def __init__(self, title, path, names, devices, network, monitors):
         """Initialise widgets and layout."""
-        super().__init__(parent=None, title=title, size=(800, 600))
+        super().__init__(parent=None, title=title, size=(1100, 600))
 
-        # Configure the file menu
+        # Track the currently viewed file path
+        self._viewer_path = path
+        self._viewer_visible = False
+
+        # ── Menu bar ────────────────────────────────────────────────────────
         fileMenu = wx.Menu()
-        menuBar = wx.MenuBar()
         fileMenu.Append(wx.ID_OPEN, "&Open")
         fileMenu.Append(wx.ID_SAVE, "&Save")
         fileMenu.AppendSeparator()
         fileMenu.Append(wx.ID_ABOUT, "&About")
         fileMenu.Append(wx.ID_EXIT, "&Exit")
+
+        viewMenu = wx.Menu()
+        self._viewer_menu_item = viewMenu.AppendCheckItem(
+            ID_TOGGLE_VIEWER, "&Show File Viewer\tCtrl+Shift+F"
+        )
+
+        menuBar = wx.MenuBar()
         menuBar.Append(fileMenu, "&File")
+        menuBar.Append(viewMenu, "&View")
         self.SetMenuBar(menuBar)
 
-        #create a splitter window to divide the canvas and the side panel
-        self.splitter = wx.SplitterWindow(self)
+        # ── Outer horizontal splitter (simulator | file viewer) ─────────────
+        # SP_LIVE_UPDATE gives smooth dragging; SP_NO_XP_THEME keeps it clean.
+        self.outer_splitter = wx.SplitterWindow(
+            self, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
+        )
+        self.outer_splitter.SetMinimumPaneSize(200)
+
+        # Left pane wraps the existing horizontal (controls / canvas) layout
+        self.left_pane = wx.Panel(self.outer_splitter)
+
+        # Right pane: file viewer – built before the splitter is configured
+        self._build_file_viewer(self.outer_splitter)
+
+        # Start with only the left pane visible
+        self.outer_splitter.Initialize(self.left_pane)
+
+        # ── Inner horizontal splitter (controls top | GL canvas bottom) ─────
+        self.splitter = wx.SplitterWindow(
+            self.left_pane, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
+        )
+
+        # Container panel for canvas and scrollbars
+        self.canvas_panel = wx.Panel(self.splitter)
 
         # Canvas for drawing signals
-        self.canvas = MyGLCanvas(self.splitter, devices, monitors)
+        self.canvas = MyGLCanvas(self.canvas_panel, devices, monitors)
+
+        # Scrollbars
+        self.v_scroll = wx.ScrollBar(self.canvas_panel, style=wx.SB_VERTICAL)
+        self.h_scroll = wx.ScrollBar(self.canvas_panel, style=wx.SB_HORIZONTAL)
+
+        self.v_scroll.Bind(wx.EVT_SCROLL, self.on_v_scroll)
+        self.h_scroll.Bind(wx.EVT_SCROLL, self.on_h_scroll)
+
+        # Arrange canvas and scrollbars like on a document
+        canvas_sizer = wx.GridBagSizer(0, 0)
+        canvas_sizer.Add(self.canvas, pos=(0, 0), flag=wx.EXPAND)
+        canvas_sizer.Add(self.v_scroll, pos=(0, 1), flag=wx.EXPAND)
+        canvas_sizer.Add(self.h_scroll, pos=(1, 0), flag=wx.EXPAND)
+        canvas_sizer.AddGrowableCol(0)
+        canvas_sizer.AddGrowableRow(0)
+        self.canvas_panel.SetSizer(canvas_sizer)
 
         self.top_panel = wx.Panel(self.splitter)
 
-        # Configure the widgets
+        # ── Widgets ──────────────────────────────────────────────────────────
         self.cycles_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000)
-        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "Run")
-        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "Continue")
+        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1))
+        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "▶", size=(32, 28))
+        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "+10", size=(45, 28))
 
         self.switch_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Select switch:")
-        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY, 
-                               choices=["SW1", "SW2", "SW3"])
+        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY,
+                                       choices=["SW1", "SW2", "SW3"])
         self.switch_on = wx.Button(self.top_panel, wx.ID_ANY, "Set ON")
         self.switch_off = wx.Button(self.top_panel, wx.ID_ANY, "Set OFF")
 
         self.monitors_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Monitors:")
-        self.monitors_list = wx.ListBox(self.top_panel, wx.ID_ANY, choices=["Signal1", "Signal2"], style=wx.LB_SINGLE)
-        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Add Monitor")
-        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "Remove Monitor")
+        self.monitors_list = wx.ListBox(
+            self.top_panel, wx.ID_ANY,
+            choices=["Signal1", "Signal2"],
+            style=wx.LB_SINGLE
+        )
+        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "+")
+        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "-")
 
-        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "Reset")
+        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "↺", size=(32, 28))
 
-        self.console = wx.TextCtrl(self.top_panel, wx.ID_ANY, "",style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
-        console_font = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        self.console = wx.TextCtrl(
+            self.top_panel, wx.ID_ANY, "",
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL
+        )
+        console_font = wx.Font(
+            9, wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+        )
         self.console.SetFont(console_font)
 
+        # Tooltips
         self.run_button.SetToolTip("Run the simulation from scratch for N cycles")
         self.continue_button.SetToolTip("Continue the simulation for N additional cycles")
         self.reset_button.SetToolTip("Reset the simulation to its initial state")
@@ -267,46 +471,34 @@ class Gui(wx.Frame):
         self.remove_monitor_btn.SetToolTip("Remove the selected monitor")
         self.spin.SetToolTip("Number of cycles to run or continue")
 
-        self.run_button.SetBackgroundColour(wx.Colour(100, 200, 100))   # green
-        self.reset_button.SetBackgroundColour(wx.Colour(200, 100, 100)) # red
-        self.continue_button.SetBackgroundColour(wx.Colour(100, 100, 200)) # blue
-
-        self.zoom_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Zoom:")
-        self.zoom_slider = wx.Slider(self.top_panel, wx.ID_ANY, value=100, minValue=100, maxValue=500, style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
-        self.zoom_slider.SetToolTip("Zoom in/out of the signal view (100% to 500%)")
-
-        self.zoom_slider.Bind(wx.EVT_SLIDER, self.on_zoom_slider)
-
-        #bind events to the widgets
+        # ── Event bindings ───────────────────────────────────────────────────
         self.Bind(wx.EVT_MENU, self.on_menu)
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
         self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
-
         self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
         self.switch_off.Bind(wx.EVT_BUTTON, self.on_switch_off)
-
         self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
         self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
-
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
 
-        # Configure sizers for layout
+        # ── Control-panel sizer ──────────────────────────────────────────────
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.top_panel.SetSizer(top_sizer)
-        top_sizer.SetMinSize((-1, 400))  # Set minimum height for the top panel
+        top_sizer.SetMinSize((-1, 150))
 
-
-        # Simulation controls box
+        # Simulation box
         sim_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Simulation")
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.run_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.continue_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.reset_button, 0, wx.EXPAND | wx.ALL, 5)
-        sim_sizer.Add(self.zoom_label, 0, wx.ALL, 5)
-        sim_sizer.Add(self.zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Buttons laid out side-by-side
+        sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sim_btn_sizer.Add(self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_sizer.Add(sim_btn_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, 3)
 
         # Switches box
         switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
@@ -319,92 +511,211 @@ class Gui(wx.Frame):
         monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
-        monitor_sizer.Add(self.add_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
-        monitor_sizer.Add(self.remove_monitor_btn, 0, wx.EXPAND | wx.ALL, 5)
+        # Side-by-side '+' and '-' buttons
+        monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
+        monitor_sizer.Add(monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3)
 
+        # Console box
         console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
 
-        # --- VIEW CONTROLS (Navigation Box) ---
-        # Note: Set parent to self.top_panel to keep rendering consistent
-        self.view_box = wx.StaticBox(self.top_panel, label="View Controls")
-        self.view_sizer = wx.StaticBoxSizer(self.view_box, wx.VERTICAL)
-
-        # Rename to self.view_zoom_slider to prevent overwriting the simulation one
-        view_zoom_label = wx.StaticText(self.top_panel, label="Zoom:")
-        self.view_zoom_slider = wx.Slider(self.top_panel, value=100, minValue=100, maxValue=500, style=wx.SL_HORIZONTAL)
-        self.view_zoom_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
-
-        pan_x_label = wx.StaticText(self.top_panel, label="Pan Horizontal:")
-        self.pan_x_slider = wx.Slider(self.top_panel, value=0, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
-        self.pan_x_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
-
-        pan_y_label = wx.StaticText(self.top_panel, label="Pan Vertical:")
-        self.pan_y_slider = wx.Slider(self.top_panel, value=0, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
-        self.pan_y_slider.Bind(wx.EVT_SLIDER, self.on_view_slider)
-
-        # Assemble the View Controls items
-        self.view_sizer.Add(view_zoom_label, 0, wx.LEFT | wx.TOP, 5)
-        self.view_sizer.Add(self.view_zoom_slider, 0, wx.EXPAND | wx.ALL, 5)
-        self.view_sizer.Add(pan_x_label, 0, wx.LEFT, 5)
-        self.view_sizer.Add(self.pan_x_slider, 0, wx.EXPAND | wx.ALL, 5)
-        self.view_sizer.Add(pan_y_label, 0, wx.LEFT, 5)
-        self.view_sizer.Add(self.pan_y_slider, 0, wx.EXPAND | wx.ALL, 5)
-
-        # Put the two switch buttons side by side
+        # Switch ON/OFF buttons side-by-side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
 
-        # Add everything cleanly to the top horizontal strip sizer
         top_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        top_sizer.Add(self.view_sizer, 0, wx.EXPAND | wx.ALL, 2) # Added nicely to the right
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
-        
-        # Split layout cleanly: top panel takes controls, bottom panel takes OpenGL
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas, 200)
-        self.splitter.SetMinimumPaneSize(120)
 
-        # The Frame's main sizer should only handle the splitter container!
+        # ── Inner splitter split ─────────────────────────────────────────────
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
+        self.splitter.SetMinimumPaneSize(145)
+
+        # ── Left-pane sizer wraps the inner splitter ─────────────────────────
+        left_sizer = wx.BoxSizer(wx.VERTICAL)
+        left_sizer.Add(self.splitter, 1, wx.EXPAND)
+        self.left_pane.SetSizer(left_sizer)
+
+        # ── Frame sizer wraps the outer splitter ─────────────────────────────
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-        main_sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 0)
-        
+        main_sizer.Add(self.outer_splitter, 1, wx.EXPAND)
         self.SetSizeHints(700, 400)
         self.SetSizer(main_sizer)
 
         self.CreateStatusBar()
         self.SetStatusText("Ready")
 
+        # Initialise scrollbar state
+        self.update_scrollbars()
+
+        # Load the initial file into the viewer if one was provided
+        if path:
+            self._load_file_into_viewer(path)
+
+    # ── File viewer ──────────────────────────────────────────────────────────
+
+    def _build_file_viewer(self, parent):
+        """Create the right-hand file-viewer panel and attach it to parent."""
+        self.viewer_panel = wx.Panel(parent)
+        self.viewer_panel.Hide()  # prevent rendering at (0,0) before first split
+        viewer_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Header bar: label + close button
+        header_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self._viewer_title = wx.StaticText(
+            self.viewer_panel, label="File Viewer",
+            style=wx.ST_ELLIPSIZE_END
+        )
+        title_font = self._viewer_title.GetFont()
+        title_font.SetWeight(wx.FONTWEIGHT_BOLD)
+        self._viewer_title.SetFont(title_font)
+
+        save_btn = wx.Button(self.viewer_panel, label="Save", size=(50, 28))
+        save_btn.SetToolTip("Save changes to file")
+        save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
+
+        close_btn = wx.Button(self.viewer_panel, label="X", size=(28, 28))
+        close_btn.SetToolTip("Close file viewer")
+        close_btn.Bind(wx.EVT_BUTTON, self._on_close_viewer)
+
+        header_sizer.Add(self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6)
+        header_sizer.Add(save_btn, 0, wx.ALL, 2)
+        header_sizer.Add(close_btn, 0, wx.ALL, 2)
+
+        # Read-only text area with monospace font
+        self._file_text = wx.TextCtrl(
+            self.viewer_panel,
+            style=wx.TE_MULTILINE | wx.TE_DONTWRAP | wx.HSCROLL
+        )
+        mono_font = wx.Font(
+            10, wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+        )
+        self._file_text.SetFont(mono_font)
+        self._file_text.SetBackgroundColour(wx.Colour(20, 24, 32))
+        self._file_text.SetForegroundColour(wx.Colour(210, 220, 235))
+
+        viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
+        viewer_sizer.Add(
+            wx.StaticLine(self.viewer_panel), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 4
+        )
+        viewer_sizer.Add(self._file_text, 1, wx.EXPAND | wx.ALL, 4)
+        self.viewer_panel.SetSizer(viewer_sizer)
+
+    def _load_file_into_viewer(self, path):
+        """Read path and display its contents in the file viewer."""
+        try:
+            with open(path, "r") as fh:
+                content = fh.read()
+            self._file_text.SetValue(content)
+            filename = path.split("/")[-1].split("\\")[-1]
+            self._viewer_title.SetLabel(f"File Viewer — {filename}")
+            self._viewer_title.SetToolTip(path)
+        except OSError as exc:
+            self._file_text.SetValue(f"Could not open file:\n{exc}")
+            self._viewer_title.SetLabel("File Viewer — error")
+
+    def _show_viewer(self):
+        """Slide the file viewer in by splitting the outer splitter."""
+        if not self._viewer_visible:
+            w = self.GetClientSize().width
+            self.outer_splitter.SplitVertically(
+                self.left_pane, self.viewer_panel,
+                w - 380          # viewer starts at 380 px wide
+            )
+            self._viewer_visible = True
+            self._viewer_menu_item.Check(True)
+            self.SetStatusText("File viewer opened.")
+
+    def _hide_viewer(self):
+        """Collapse the file viewer by un-splitting."""
+        if self._viewer_visible:
+            self.outer_splitter.Unsplit(self.viewer_panel)
+            self._viewer_visible = False
+            self._viewer_menu_item.Check(False)
+            self.SetStatusText("File viewer closed.")
+
+    def _on_save_viewer(self, event):
+        """Save the current contents of the file viewer back to disk."""
+        if not self._viewer_path:
+            wx.MessageBox(
+                "No file is open — nothing to save.",
+                "Save", wx.ICON_WARNING | wx.OK
+            )
+            return
+        try:
+            with open(self._viewer_path, "w") as fh:
+                fh.write(self._file_text.GetValue())
+            self.SetStatusText(f"Saved: {self._viewer_path}")
+            self.log(f"File saved: {self._viewer_path}")
+        except OSError as exc:
+            wx.MessageBox(
+                f"Could not save file:\n{exc}",
+                "Save Error", wx.ICON_ERROR | wx.OK
+            )
+
+    def _on_close_viewer(self, event):
+        """Handle the X button inside the viewer panel."""
+        self._hide_viewer()
+
+    # ── Menu ─────────────────────────────────────────────────────────────────
+
     def on_menu(self, event):
         """Handle the event when the user selects a menu item."""
         Id = event.GetId()
         if Id == wx.ID_EXIT:
             self.Close(True)
-        if Id == wx.ID_ABOUT:
+
+        elif Id == wx.ID_ABOUT:
             wx.MessageBox(
                 "Logic Simulator\nGF2 Software Project\n"
                 "Cambridge University Engineering Department\n2026",
                 "About Logic Simulator",
                 wx.ICON_INFORMATION | wx.OK,
             )
-        if Id == wx.ID_OPEN:
-            wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
-            dialog = wx.FileDialog(self, "Open circuit definition file",wildcard=wildcard,style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
 
-            if dialog.ShowModal() == wx.ID_OK:
-                path = dialog.GetPath()
+        elif Id == wx.ID_SAVE:
+            self._on_save_viewer(event)
+
+        elif Id == wx.ID_OPEN:
+            wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
+            dlg = wx.FileDialog(
+                self, "Open circuit definition file",
+                wildcard=wildcard,
+                style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+            )
+            if dlg.ShowModal() == wx.ID_OK:
+                path = dlg.GetPath()
+                self._viewer_path = path
                 self.SetTitle("Logic Simulator - " + path)
                 self.SetStatusText("Opened: " + path)
                 self.log("Opened file: " + path)
-            dialog.Destroy()
+                # Load into viewer and show the panel
+                self._load_file_into_viewer(path)
+                self._show_viewer()
+            dlg.Destroy()
+
+        elif Id == ID_TOGGLE_VIEWER:
+            if self._viewer_visible:
+                self._hide_viewer()
+            else:
+                # Reload current file before showing
+                if self._viewer_path:
+                    self._load_file_into_viewer(self._viewer_path)
+                self._show_viewer()
+
+    # ── Widget event handlers ─────────────────────────────────────────────────
 
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
+        self.continue_button.SetLabel(f"+{spin_value}")
         text = "".join(["New spin control value: ", str(spin_value)])
         self.canvas.render(text)
         self.log(text)
@@ -453,7 +764,7 @@ class Gui(wx.Frame):
         text = "Remove monitor pressed."
         self.canvas.render(text)
         self.log("Remove monitor pressed.")
-    
+
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
         self.SetStatusText("Simulation reset.")
@@ -462,29 +773,90 @@ class Gui(wx.Frame):
 
     def log(self, message):
         """Append a time-stamped message to the console output."""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.console.AppendText(f"[{timestamp}] {message}\n")
 
-    def on_zoom_slider(self, event):
-        """Handle the event when the user changes the zoom slider."""
-        new_zoom = self.zoom_slider.GetValue() / 100.0
+    def on_h_scroll(self, event):
+        """Handle horizontal scrollbar scrolling."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        scrollable_x = range_max - thumb_size
         
-        if new_zoom < 1.0:
-            new_zoom = 1.0
+        if scrollable_x > 0:
+            pos = self.h_scroll.GetThumbPosition()
+            self.canvas.pan_x_pct = pos / scrollable_x
+        else:
+            self.canvas.pan_x_pct = 0.0
             
-        self.canvas.zoom = new_zoom
         self.canvas.init = False
         self.canvas.Refresh()
+
+    def on_v_scroll(self, event):
+        """Handle vertical scrollbar scrolling."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        scrollable_y = range_max - thumb_size
+        
+        if scrollable_y > 0:
+            pos = self.v_scroll.GetThumbPosition()
+            self.canvas.pan_y_pct = pos / scrollable_y
+        else:
+            self.canvas.pan_y_pct = 0.0
+            
+        self.canvas.init = False
+        self.canvas.Refresh()
+
+    def on_zoom_in(self, event):
+        """Zoom in by 10%."""
+        self.canvas.zoom = min(5.0, self.canvas.zoom * 1.1)
+        self.update_canvas_after_zoom()
+
+    def on_zoom_out(self, event):
+        """Zoom out by 10%."""
+        self.canvas.zoom = max(1.0, self.canvas.zoom / 1.1)
+        self.update_canvas_after_zoom()
+
+    def update_canvas_after_zoom(self):
+        """Refresh canvas and update scrollbars after zoom factor changes."""
+        self.canvas.init = False
+        self.canvas.Refresh()
+        self.update_scrollbars()
+
+    def update_scrollbars(self):
+        """Update scrollbar ranges, thumb sizes, and positions based on canvas state."""
+        zoom = getattr(self.canvas, 'zoom', 1.0)
+        pan_x_pct = getattr(self.canvas, 'pan_x_pct', 0.0)
+        pan_y_pct = getattr(self.canvas, 'pan_y_pct', 0.0)
+
+        range_max = 10000
+        thumb_size = int(range_max / zoom)
+        
+        scrollable_x = range_max - thumb_size
+        scrollable_y = range_max - thumb_size
+        
+        pos_x = int(pan_x_pct * scrollable_x) if scrollable_x > 0 else 0
+        pos_y = int(pan_y_pct * scrollable_y) if scrollable_y > 0 else 0
+        
+        page_size = thumb_size
+
+        self.h_scroll.SetScrollbar(pos_x, thumb_size, range_max, page_size, refresh=True)
+        self.v_scroll.SetScrollbar(pos_y, thumb_size, range_max, page_size, refresh=True)
+        
+
+    def on_reset_view(self, event):
+        """Reset all view parameters back to defaults and refresh canvas."""
+        self.canvas.zoom = 1.0
+        self.canvas.pan_x_pct = 0.0
+        self.canvas.pan_y_pct = 0.0
+        self.canvas.pan_x = 0.0
+        self.canvas.pan_y = 0.0
+        self.canvas.init = False
+        self.canvas.Refresh()
+        self.update_scrollbars()
+        self.SetStatusText("View reset to default dimensions.")
+        self.log("View reset to default dimensions.")
+
     
-    def on_view_slider(self, event):
-        """Handle updates from any of the three view control sliders."""
-        # Convert zoom to a 1.0 to 5.0 multiplier safely using the renamed slider
-        self.canvas.zoom = self.view_zoom_slider.GetValue() / 100.0 
-        
-        # Convert pan sliders to a 0.0 to 1.0 percentage
-        self.canvas.pan_x_pct = self.pan_x_slider.GetValue() / 100.0
-        self.canvas.pan_y_pct = self.pan_y_slider.GetValue() / 100.0
-        
-        # Force OpenGL to rebuild the projection matrix and redraw
-        self.canvas.init = False
-        self.canvas.Refresh()
+    

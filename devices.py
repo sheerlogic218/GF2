@@ -10,9 +10,9 @@ Devices - makes and stores all the devices in the logic network.
 """
 
 import random
+from typing import Literal
 from uuid import UUID
 from names import Names
-
 
 class Device:
     """Store device properties.
