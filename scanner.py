@@ -80,6 +80,7 @@ class Scanner:
             "dtype",
             "monitor",
             "end",
+            "instance",
         ]
         self.names.lookup(self.keywords)
 
@@ -116,8 +117,6 @@ class Scanner:
             while self.get_current_char() != "\n":
                 self.advance()
             self.advance()
-
-
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
