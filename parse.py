@@ -168,15 +168,11 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "switch"):
             self.expect(Symbol.NAME)
-            name = self.symbol.text
             self.expect(Symbol.PUNCTUATION, "=")
             if self.symbol.type == Symbol.NUMBER and self.symbol.text in ["0", "1"]:
                 # Valid, add device
                 id = uuid.uuid4()
                 self.devices.make_device(id, self.devices.SWITCH, int(self.symbol.text))
-                switch = self.devices.get_device(id)
-                device_type = self.names.inv_name_IDS[switch.device_kind]
-                print(f"DEVICE {device_type}")
                 self.next_symbol()
             else:
                 print("Syntax Error: Expected 0 or 1 for switch state")

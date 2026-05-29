@@ -71,6 +71,7 @@ def main(arg_list):
         scanner = Scanner(path, names)
         parser = Parser(names, devices, network, monitors, scanner)
         if parser.parse_network():
+
             for device in parser.devices.devices_list:
                 print(parser.names.inv_name_IDS[device.device_kind])
 
