@@ -202,10 +202,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self.Refresh()
     
         # Notify Gui to update scrollbars on resize
-        gui = self.GetParent()
-        while gui and not hasattr(gui, 'update_scrollbars'):
-            gui = gui.GetParent()
-        if gui:
+        gui = wx.GetTopLevelParent(self)
+        if gui and hasattr(gui, 'update_scrollbars'):
             gui.update_scrollbars()
 
     def on_mouse(self, event):
@@ -214,9 +212,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         if event.Entering():
             self.SetFocus()
         # Find the parent Gui frame to trigger scrollbar updates
-        gui = self.GetParent()
-        while gui and not hasattr(gui, 'update_scrollbars'):
-            gui = gui.GetParent()
+        gui = wx.GetTopLevelParent(self)
+        if gui and hasattr(gui, 'update_scrollbars'):
+            gui.update_scrollbars()
 
         # Handle mouse wheel zooming
         rotation = event.GetWheelRotation()
@@ -289,11 +287,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         save_item = menu.Append(wx.ID_ANY, "Save Image...")
         copy_item = menu.Append(wx.ID_ANY, "Copy Image")
 
-        gui = self.GetParent()
-        while gui and not hasattr(gui, 'on_reset_view'):
-            gui = gui.GetParent()
-        if gui:
-            self.Bind(wx.EVT_MENU, gui.on_reset_view, reset_item)
+        gui = wx.GetTopLevelParent(self)
+        if gui and hasattr(gui, 'update_scrollbars'):
+            gui.update_scrollbars()
 
         self.Bind(wx.EVT_MENU, self.on_save_image, save_item)
         self.Bind(wx.EVT_MENU, self.on_copy_image, copy_item)
@@ -343,7 +339,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Zoom in/out with Ctrl+= or Ctrl+- when canvas has focus."""
         if event.ControlDown():
             key = event.GetKeyCode()
-            gui = self.GetParent()
+            gui = wx.GetTopLevelParent(self)
             while gui and not hasattr(gui, 'on_zoom_in'):
                 gui = gui.GetParent()
             if gui:
@@ -373,6 +369,8 @@ class Gui(wx.Frame):
         fileMenu.Append(wx.ID_ABOUT, "&About")
         fileMenu.Append(wx.ID_EXIT, "&Exit")
 
+
+
         viewMenu = wx.Menu()
         self._viewer_menu_item = viewMenu.AppendCheckItem(
             ID_TOGGLE_VIEWER, "&Show File Viewer\tCtrl+Shift+F"
@@ -382,6 +380,10 @@ class Gui(wx.Frame):
         menuBar.Append(fileMenu, "&File")
         menuBar.Append(viewMenu, "&View")
         self.SetMenuBar(menuBar)
+
+        helpMenu = wx.Menu()
+        helpMenu.Append(wx.ID_HELP, "&Documentation")
+        menuBar.Append(helpMenu, "&Help")
 
         # ── Outer horizontal splitter (simulator | file viewer) ─────────────
         # SP_LIVE_UPDATE gives smooth dragging; SP_NO_XP_THEME keeps it clean.
@@ -461,7 +463,7 @@ class Gui(wx.Frame):
         )
         self.console.SetFont(console_font)
 
-        # Tooltips# Tooltips
+        # Tooltips
         initial_cycles = self.spin.GetValue()
         self.run_button.SetToolTip(f"Run the simulation from scratch for {initial_cycles} cycles")
         self.continue_button.SetToolTip(f"Continue the simulation for {initial_cycles} additional cycles")
@@ -482,7 +484,7 @@ class Gui(wx.Frame):
         self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
         self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
-
+        self.Bind(wx.EVT_MENU, self.on_help_menu, id=wx.ID_HELP)
         # ── Control-panel sizer ──────────────────────────────────────────────
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.top_panel.SetSizer(top_sizer)
@@ -865,6 +867,32 @@ class Gui(wx.Frame):
         self.update_scrollbars()
         self.SetStatusText("View reset to default dimensions.")
         self.log("View reset to default dimensions.")
+
+    def on_help_menu(self, event):
+        """Display a pop-up dialog describing the GUI functionality and user controls."""
+        help_text = (
+            "Welcome to the Logic Simulator!\n\n"
+            "Here is a summary of the available interface functions:\n\n"
+            "1. Simulation Controls:\n"
+            "   - Use the spin box to adjust the target simulation cycle count.\n"
+            "   - Click '▶' to start or restart the simulation from zero.\n"
+            "   - Click '+10' (or your step button) to continue running further cycles.\n"
+            "   - Click '↺' to clear current history and reset the network.\n\n"
+            "2. Interacting with the Canvas:\n"
+            "   - Drag with Left Mouse Button to pan across the logic waveforms.\n"
+            "   - Scroll your Mouse Wheel to zoom in/out smoothly on active lines.\n"
+            "   - Right-click inside the canvas to copy or save a snapshot image.\n\n"
+            "3. Switches & Monitors:\n"
+            "   - Select a switch from the dropdown menu and toggle its state via 'Set ON' / 'Set OFF'.\n"
+            "   - Add (+) or remove (-) selected component signals using the Monitors listbox.\n\n"
+            "4. View Options:\n"
+            "   - Toggle the live text definition panel under View -> Show File Viewer."
+        )
+    
+        # Create and display the modal information dialogue box
+        dlg = wx.MessageDialog(self, help_text, "GUI Usage Guide", wx.OK | wx.ICON_INFORMATION)
+        dlg.ShowModal()
+        dlg.Destroy()
 
     
     
