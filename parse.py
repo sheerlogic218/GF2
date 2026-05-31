@@ -149,42 +149,85 @@ class Parser:
                 self.parse_assignment()
         else:
             print(
-                f"Syntax Error: invalid statement starting with '{self.symbol.text}' at {self.scanner.line_position},{self.scanner.line_count}"
+                f"Syntax Error: invalid statement starting with '{self.symbol.text}' at {self.scanner.line_count},{self.scanner.line_position}"
             )
             self.error_count += 1
             self.next_symbol()
 
     def parse_declaration(self):
         if self.accept(Symbol.KEYWORD, "wire"):
-            self.expect(Symbol.NAME)
+            if self.symbol.type == Symbol.NAME:
+                wire_name = self.symbol.text
+                [wire_id] = self.names.lookup([wire_name])
+                self.next_symbol()
+
+                self.devices.make_device(wire_id, self.devices.AND, 1)
+            else:
+                self.expect(Symbol.NAME)
+                return
+
             if self.accept(Symbol.PUNCTUATION, "["):
                 self.expect(Symbol.NUMBER)
                 self.expect(Symbol.PUNCTUATION, "]")
             self.expect(Symbol.PUNCTUATION, ";")
 
         elif self.accept(Symbol.KEYWORD, "clock"):
-            self.expect(Symbol.NAME)
+            if self.symbol.type == Symbol.NAME:
+                clock_name = self.symbol.text
+                [clock_id] = self.names.lookup([clock_name])
+                self.next_symbol()
+            else:
+                self.expect(Symbol.NAME)
+                return
+
             self.expect(Symbol.PUNCTUATION, "[")
-            self.expect(Symbol.NUMBER)
+
+            if self.symbol.type == Symbol.NUMBER:
+                period = int(self.symbol.text)
+                self.next_symbol()
+            else:
+                self.expect(Symbol.NUMBER)
+                return
+
             self.expect(Symbol.PUNCTUATION, "]")
             self.expect(Symbol.PUNCTUATION, ";")
 
+            # Make clock
+            self.devices.make_device(clock_id, self.devices.CLOCK, period)
+
         elif self.accept(Symbol.KEYWORD, "switch"):
-            self.expect(Symbol.NAME)
+            if self.symbol.type == Symbol.NAME:
+                switch_name = self.symbol.text
+                [switch_id] = self.names.lookup([switch_name])
+                self.next_symbol()
+            else:
+                self.expect(Symbol.NAME)
+                return
+
             self.expect(Symbol.PUNCTUATION, "=")
+
             if self.symbol.type == Symbol.NUMBER and self.symbol.text in ["0", "1"]:
                 # Valid, add device
-                id = uuid.uuid4()
-                self.devices.make_device(id, self.devices.SWITCH, int(self.symbol.text))
+                state = int(self.symbol.text)
+                self.devices.make_device(switch_id, self.devices.SWITCH, state)
                 self.next_symbol()
             else:
                 print("Syntax Error: Expected 0 or 1 for switch state")
                 self.error_count += 1
+
             self.expect(Symbol.PUNCTUATION, ";")
 
         elif self.accept(Symbol.KEYWORD, "dtype"):
-            self.expect(Symbol.NAME)
+            if self.symbol.type == Symbol.NAME:
+                dtype_name = self.symbol.text
+                [dtype_id] = self.names.lookup([dtype_name])
+                self.next_symbol()
+            else:
+                self.expect(Symbol.NAME)
+                return
+
             self.expect(Symbol.PUNCTUATION, ";")
+            self.devices.make_device(dtype_id, self.devices.D_TYPE)
 
     def parse_assignment(self):
         """Parse an assignment and connect the RHS to the LHS."""
@@ -236,9 +279,16 @@ class Parser:
         if len(inputs) == 1:
             return inputs[0]
 
-        gate_name = f"__{gate_type}_{uuid.uuid4().hex[:8]}"
+        gate_name = f"__{gate_type}__{uuid.uuid4().hex}"
         [gate_id] = self.names.lookup([gate_name])
-        self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
+
+        if gate_type == "XOR" and len(inputs) == 2:
+            # XOR gates need 2 inputs
+            # -------------------------------------------------------------------------------------
+            # display this error to the user in a nice format
+            self.devices.make_device(gate_id, gates[gate_type][2], None)
+        else:
+            self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
 
         for i, (src_dev, src_port) in enumerate(inputs, start=1):
             [input_port_id] = self.names.lookup([f"I{i}"])
@@ -320,8 +370,6 @@ class Parser:
 
     def parse_instance(self):
         self.expect(Symbol.KEYWORD, "instance")
-
-        self.expect(Symbol.NAME)
 
         if self.symbol.type == Symbol.NAME:
             module_name = self.symbol.text

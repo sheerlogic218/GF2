@@ -14,6 +14,7 @@ from typing import Literal
 from uuid import UUID
 from names import Names
 
+
 class Device:
     """Store device properties.
 
@@ -331,6 +332,7 @@ class Devices:
         elif device_kind in self.gate_types:
             # Device property is the number of inputs
             if device_kind == self.XOR:
+                # XOR only accepts 2 inputs
                 if device_property is not None:
                     error_type = self.QUALIFIER_PRESENT
                 else:
