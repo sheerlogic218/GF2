@@ -10,6 +10,7 @@ Show help: logsim.py -h
 Command line user interface: logsim.py -c <file path>
 Graphical user interface: logsim.py <file path>
 """
+
 import getopt
 import sys
 
@@ -31,10 +32,12 @@ def main(arg_list):
     Run either the command line user interface, the graphical user interface,
     or display the usage message.
     """
-    usage_message = ("Usage:\n"
-                     "Show help: logsim.py -h\n"
-                     "Command line user interface: logsim.py -c <file path>\n"
-                     "Graphical user interface: logsim.py <file path>")
+    usage_message = (
+        "Usage:\n"
+        "Show help: logsim.py -h\n"
+        "Command line user interface: logsim.py -c <file path>\n"
+        "Graphical user interface: logsim.py <file path>"
+    )
     try:
         options, arguments = getopt.getopt(arg_list, "hc:")
     except getopt.GetoptError:
@@ -77,8 +80,7 @@ def main(arg_list):
 
             # Initialise an instance of the gui.Gui() class
             app = wx.App()
-            gui = Gui("Logic Simulator", path, names, devices, network,
-                      monitors)
+            gui = Gui("Logic Simulator", path, names, devices, network, monitors)
             gui.Show(True)
             app.MainLoop()
 

@@ -8,6 +8,7 @@ Classes
 -------
 Parser - parses the definition file and builds the logic network.
 """
+
 import uuid
 
 from devices import Devices
@@ -147,7 +148,9 @@ class Parser:
             else:
                 self.parse_assignment()
         else:
-            print(f"Syntax Error: invalid statement starting with '{self.symbol.text}' at {self.scanner.line_position},{self.scanner.line_count}")
+            print(
+                f"Syntax Error: invalid statement starting with '{self.symbol.text}' at {self.scanner.line_position},{self.scanner.line_count}"
+            )
             self.error_count += 1
             self.next_symbol()
 
@@ -184,115 +187,169 @@ class Parser:
             self.expect(Symbol.PUNCTUATION, ";")
 
     def parse_assignment(self):
-        self.parse_lhs()
-        if self.accept(Symbol.PUNCTUATION, "=") or self.accept(
-            Symbol.PUNCTUATION, "<="
+        """Parse an assignment and connect the RHS to the LHS."""
+        target_device_id, target_port_id = self.parse_lhs()
+
+        if not (
+            self.accept(Symbol.PUNCTUATION, "=")
+            or self.accept(Symbol.PUNCTUATION, "<=")
         ):
-            pass
-        else:
             print(f"Syntax Error: Expected '=' or '<=', got {self.symbol.text}")
             self.error_count += 1
-        self.parse_rhs()
+
+        source_device_id, source_port_id = self.parse_rhs()
         self.expect(Symbol.PUNCTUATION, ";")
 
+        # If assigning to a standalone variable (e.g., A = ... rather than D1.DATA = ...)
+        if target_port_id is None:
+            # If this variable hasn't been instantiated yet, make it a buffer (1-input AND gate)
+            if self.devices.get_device(target_device_id) is None:
+                self.devices.make_device(target_device_id, self.devices.AND, 1)
+
+            # Wires and buffers receive their input on port 'I1'
+            [target_port_id] = self.names.lookup(["I1"])
+
+        # Wire the calculated right-hand expression to the target on the left
+        error = self.network.make_connection(
+            source_device_id, source_port_id, target_device_id, target_port_id
+        )
+        if error != self.network.NO_ERROR:
+            print(f"Semantic Error: Failed to connect. Error code: {error}")
+            self.error_count += 1
+
     def parse_lhs(self):
-        self.parse_signal_or_port_ref()
+        return self.parse_signal_or_port_ref()
 
     def parse_rhs(self):
-        self.parse_or_expr()
+        return self.parse_or_expr()
+
+    def _parse_gate(self, gate_type):
+        gates = {
+            "OR": [self.parse_and_expr, "+", self.devices.OR],
+            "AND": [self.parse_xor_expr, "*", self.devices.AND],
+            "XOR": [self.parse_factor, "^", self.devices.XOR],
+        }
+        inputs = [gates[gate_type][0]()]
+        while self.accept(Symbol.PUNCTUATION, gates[gate_type][1]):
+            inputs.append(gates[gate_type][0]())
+
+        if len(inputs) == 1:
+            return inputs[0]
+
+        gate_name = f"__{gate_type}_{uuid.uuid4().hex[:8]}"
+        [gate_id] = self.names.lookup([gate_name])
+        self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
+
+        for i, (src_dev, src_port) in enumerate(inputs, start=1):
+            [input_port_id] = self.names.lookup([f"I{i}"])
+            self.network.make_connection(src_dev, src_port, gate_id, input_port_id)
+
+        return (gate_id, None)
 
     def parse_or_expr(self):
-        or_inputs = [self.parse_and_expr()]
-        while self.accept(Symbol.PUNCTUATION, "+"):
-            or_inputs.append(self.parse_and_expr())
-
-        if len(or_inputs) == 1:
-            return or_inputs[0]
-
-        or_gate_id = uuid.uuid4()
-        self.devices.make_device(or_gate_id,self.devices.OR, len(or_inputs))
-        or_gate = self.devices.get_device(or_gate_id)
-        print(f"OR GATE {or_gate}")
-        return or_gate
+        return self._parse_gate("OR")
 
     def parse_and_expr(self):
-        and_inputs = [self.parse_xor_expr()]
-        while self.accept(Symbol.PUNCTUATION, "*"):
-            and_inputs.append(self.parse_xor_expr())
-
-        if len(and_inputs) == 1:
-            return and_inputs[0]
-
-        and_gate_id = uuid.uuid4()
-        self.devices.make_device(and_gate_id,self.devices.AND, len(and_inputs))
-        and_gate = self.devices.get_device(and_gate_id)
-        print(f"AND GATE {and_gate}")
-        print(f"AND GATE INPUTS {and_inputs}")
-        return and_gate
-
-
+        return self._parse_gate("AND")
 
     def parse_xor_expr(self):
-        xor_inputs = [self.parse_factor()]
-        while self.accept(Symbol.PUNCTUATION, "^"):
-            xor_inputs.append(self.parse_factor())
-
-        if len(xor_inputs) == 1:
-            return xor_inputs[0]
-
-        xor_gate_id = uuid.uuid4()
-        self.devices.make_device(xor_gate_id,self.devices.XOR, len(xor_inputs))
-        xor_gate = self.devices.get_device(xor_gate_id)
-        print(f"XOR GATE {xor_gate}")
-        return xor_gate
+        return self._parse_gate("XOR")
 
     def parse_factor(self):
-        self.accept(Symbol.PUNCTUATION, "!")
+        """Parse factors, handling NOT operators and brackets natively."""
+        invert = self.accept(Symbol.PUNCTUATION, "!")
 
         if self.accept(Symbol.PUNCTUATION, "("):
-            self.parse_or_expr()
+            # This recursion natively handles innermost brackets exactly like your script!
+            signal = self.parse_or_expr()
             self.expect(Symbol.PUNCTUATION, ")")
         else:
-            self.parse_signal_or_port_ref()
+            signal = self.parse_signal_or_port_ref()
+
+        # If there's a NOT operator (!), instantiate a 1-input NAND gate as an inverter
+        if invert:
+            gate_name = f"__NOT_{uuid.uuid4().hex[:8]}"
+            [gate_id] = self.names.lookup([gate_name])
+
+            # A 1-input NAND functions as a NOT gate in this architecture
+            self.devices.make_device(gate_id, self.devices.NAND, 1)
+            [input_port_id] = self.names.lookup(["I1"])
+
+            self.network.make_connection(signal[0], signal[1], gate_id, input_port_id)
+            return (gate_id, None)
+
+        return signal
 
     def parse_signal_or_port_ref(self):
+        """Parse a reference to a device or a specific port[cite: 20]."""
+        # Capture the device name
+        name = self.symbol.text
+        [device_id] = self.names.lookup([name])
         self.expect(Symbol.NAME)
 
-        # Port
+        port_id = None
+        # Check if a specific port is referenced (e.g., DTYPE.Q)
         if self.accept(Symbol.PUNCTUATION, "."):
             valid_ports = ["CLK", "DATA", "SET", "CLEAR", "Q", "QBAR"]
             if self.symbol.type == Symbol.NAME and self.symbol.text in valid_ports:
+                port_name = self.symbol.text
+                [port_id] = self.names.lookup([port_name])
                 self.next_symbol()
             else:
                 print(f"Syntax Error: Expected valid port_name, got {self.symbol.text}")
                 self.error_count += 1
 
-        # Signal
-        elif self.accept(Symbol.PUNCTUATION, "["):
-            self.expect(Symbol.NUMBER)
-            if self.accept(Symbol.PUNCTUATION, ":"):
-                self.expect(Symbol.NUMBER)
-            self.expect(Symbol.PUNCTUATION, "]")
+        # EG thing[3], handle that logic here.
+
+        return (device_id, port_id)
 
     def parse_monitor(self):
+        """Parse a monitor declaration and add it to the monitors list."""
         self.expect(Symbol.KEYWORD, "monitor")
-        self.parse_signal_or_port_ref()
+
+        device_id, port_id = self.parse_signal_or_port_ref()
+
         self.expect(Symbol.PUNCTUATION, ";")
 
+        if device_id is not None:
+            error = self.monitors.make_monitor(device_id, port_id)
+
+            if error != self.monitors.NO_ERROR:
+                print(f"Semantic Error: Failed to add monitor. Error code: {error}")
+                self.error_count += 1
+
     def parse_instance(self):
-        self.expect(Symbol.NAME, "instance")
+        self.expect(Symbol.KEYWORD, "instance")
+
         self.expect(Symbol.NAME)
+
+        if self.symbol.type == Symbol.NAME:
+            module_name = self.symbol.text
+            self.next_symbol()
+        else:
+            # error handling
+            self.expect(Symbol.NAME)
+            return
+
         self.expect(Symbol.PUNCTUATION, "(")
 
-        self.parse_bind_list()
+        module_inputs = self.parse_bind_list()
+
         self.expect(Symbol.PUNCTUATION, "->")
-        self.parse_bind_list()
+
+        module_outputs = self.parse_bind_list()
 
         self.expect(Symbol.PUNCTUATION, ")")
         self.expect(Symbol.PUNCTUATION, ";")
 
+        # check form of I/O against module def
+        # re-instantiate the module in this place
+
     def parse_bind_list(self):
+        signals = []
         if self.symbol.type == Symbol.NAME:
-            self.parse_signal_or_port_ref()
+            signals.append(self.parse_signal_or_port_ref())
+
             while self.accept(Symbol.PUNCTUATION, ","):
-                self.parse_signal_or_port_ref()
+                signals.append(self.parse_signal_or_port_ref())
+        return signals
