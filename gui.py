@@ -187,7 +187,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 signal_list, box_x_start, cycle_width, high_y, low_y
             )
             if trace_segments:
-                GL.glColor3f(0.0, 1.0, 0.4)  # Distinct Waveform green trace
+                GL.glColor3f(0.0, 1.0, 0.4)  # green trace
                 GL.glLineWidth(2.5)
                 GL.glBegin(GL.GL_LINES)
                 for x1, y1, x2, y2 in trace_segments:
@@ -198,10 +198,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             
             if k < num_monitors - 1:
                 channel_divider_y = signal_y_bot + row_height
-                
-                # Option A: Solid dividing line matching your box color themes
-                GL.glColor3f(0.3, 0.4, 0.5)  # Matches outer box color properties
-                GL.glLineWidth(1.0)
+                GL.glColor3f(0.3, 0.4, 0.5)  
+                GL.glLineWidth(2.0)
                 GL.glBegin(GL.GL_LINES)
                 GL.glVertex2f(box_x_start, channel_divider_y)
                 GL.glVertex2f(box_x_end, channel_divider_y)
