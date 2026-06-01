@@ -195,6 +195,17 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                     GL.glVertex2f(x2, y2)
                 GL.glEnd()
                 GL.glLineWidth(1.0)
+            
+            if k < num_monitors - 1:
+                channel_divider_y = signal_y_bot + row_height
+                
+                # Option A: Solid dividing line matching your box color themes
+                GL.glColor3f(0.3, 0.4, 0.5)  # Matches outer box color properties
+                GL.glLineWidth(1.0)
+                GL.glBegin(GL.GL_LINES)
+                GL.glVertex2f(box_x_start, channel_divider_y)
+                GL.glVertex2f(box_x_end, channel_divider_y)
+                GL.glEnd()
 
         GL.glFlush()
         self.SwapBuffers()
