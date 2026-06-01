@@ -1,0 +1,13 @@
+module and_gate : -> ;
+ 
+    switch A = 0 ;
+    switch B = 1 ;
+ 
+    wire out ;
+ 
+    out = A * B ;
+ 
+    monitor out ;
+ 
+end ;
+ 

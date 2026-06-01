@@ -1,0 +1,25 @@
+module bool_ops : -> ;
+ 
+    switch A = 0 ;
+    switch B = 1 ;
+    switch C = 0 ;
+ 
+    wire out1 ;
+    wire out2 ;
+    wire out3 ;
+    wire out4 ;
+    wire out5 ;
+ 
+    out1 = A ^ B ;
+    out2 = A + B ;
+    out3 = A * B ;
+    out4 = !A ;
+    out5 = A * B + C ;
+ 
+    monitor out1 ;
+    monitor out2 ;
+    monitor out3 ;
+    monitor out4 ;
+    monitor out5 ;
+ 
+end ;
