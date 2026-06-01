@@ -59,6 +59,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         # Initialise variables for zooming
         self.zoom = 1.0
         self.visible_cycles = None
+        self.previous_signal_traces = {}
 
         # Bind events to the canvas
         self.Bind(wx.EVT_PAINT, self.on_paint)
@@ -132,7 +133,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # 3. Calculate max cycles and draw universal background vertical grids
         visible_signals = {
-            monitor: self._visible_signal_list(signal_list)
+            monitor: self._visible_signal_list(monitor, signal_list)
             for monitor, signal_list in self.monitors.monitors_dictionary.items()
         }
         num_cycles = max((len(lst) for lst in visible_signals.values()), default=0)
@@ -231,11 +232,12 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         return segments
 
-    def _visible_signal_list(self, signal_list):
+    def _visible_signal_list(self, monitor, signal_list):
         """Return the whole trace or only the configured final cycles."""
         if self.visible_cycles is None:
             return signal_list
-        return signal_list[-self.visible_cycles:]
+        previous_signal_list = self.previous_signal_traces.get(monitor, [])
+        return (previous_signal_list + signal_list)[-self.visible_cycles:]
     
     def on_paint(self, event):
         """Handle the paint event by validating the DC and calling render."""
@@ -796,6 +798,14 @@ class Gui(wx.Frame):
                 return False
         return True
 
+    def archive_current_traces(self):
+        """Store current monitor traces for the next cycle-windowed run view."""
+        self.canvas.previous_signal_traces = {
+            monitor: list(signal_list)
+            for monitor, signal_list in self.monitors.monitors_dictionary.items()
+            if signal_list
+        }
+
     def update_monitors_list(self):
         """Refresh the monitor list from backend monitor state."""
         monitored_signals, non_monitored_signals = self.monitors.get_signal_names()
@@ -840,6 +850,7 @@ class Gui(wx.Frame):
         cycles = self.spin.GetValue()
         self.SetStatusText("Running for " + str(cycles) + " cycles...")
         self.log("Run clicked: " + str(cycles) + " cycles requested.")
+        self.archive_current_traces()
         self.cycles_completed = 0
         self.monitors.reset_monitors()
         self.devices.cold_startup()
@@ -951,6 +962,7 @@ class Gui(wx.Frame):
         """Handle the event when the user clicks the reset button."""
         self.cycles_completed = 0
         self.monitors.reset_monitors()
+        self.canvas.previous_signal_traces = {}
         self.devices.cold_startup()
         self.SetStatusText("Simulation reset.")
         self.canvas.render("Simulation reset.")
