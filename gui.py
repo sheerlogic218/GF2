@@ -45,6 +45,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self.init = False
         self.context = wxcanvas.GLContext(self)
 
+        self.devices = devices
+        self.monitors = monitors
+
         # Initialise variables for panning
         self.pan_x = 0
         self.pan_y = 0
@@ -55,6 +58,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # Initialise variables for zooming
         self.zoom = 1.0
+        self.visible_cycles = None
 
         # Bind events to the canvas
         self.Bind(wx.EVT_PAINT, self.on_paint)
@@ -96,7 +100,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glLoadIdentity()
 
     def render(self, text=""):
-        """Handle all drawing operations."""
+        """Render the canvas graphics, plotting active monitor waveforms dynamically."""
         self.SetCurrent(self.context)
         if not self.init:
             self.init_gl()
@@ -104,27 +108,13 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
+        # 1. Establish canvas and viewport plotting limits
         size = self.GetClientSize()
-        canvas_width = size.width
-        canvas_height = size.height
+        canvas_width, canvas_height = size.width, size.height
+        box_x_start, box_x_end = 80, canvas_width - 40
+        box_y_bot, box_y_top = 20, canvas_height - 20
 
-        box_x_start = 80
-        box_x_end = canvas_width - 40
-
-        box_y_bot = 20
-        box_y_top = canvas_height - 20
-
-        high_y = box_y_bot + (box_y_top - box_y_bot) * 0.25
-        low_y = box_y_bot + (box_y_top - box_y_bot) * 0.75
-
-        num_cycles = 10
-        cycle_width = (box_x_end - box_x_start) / num_cycles
-
-        hud_x_position = self.pan_x + 20
-
-        self.render_text("High", hud_x_position, high_y - 4)
-        self.render_text("Low", hud_x_position, low_y - 4)
-
+        # 2. Draw outer border layout box
         GL.glColor3f(0.3, 0.4, 0.5)
         GL.glLineWidth(1.5)
         GL.glBegin(GL.GL_LINE_LOOP)
@@ -134,67 +124,123 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
-        GL.glEnable(GL.GL_LINE_STIPPLE)
-        GL.glLineStipple(1, 0x00FF)
-        GL.glColor3f(0.4, 0.4, 0.4)
-        GL.glLineWidth(1.0)
-        GL.glBegin(GL.GL_LINES)
-        GL.glVertex2f(box_x_start, high_y)
-        GL.glVertex2f(box_x_end, high_y)
-        GL.glVertex2f(box_x_start, low_y)
-        GL.glVertex2f(box_x_end, low_y)
-        GL.glEnd()
-        GL.glDisable(GL.GL_LINE_STIPPLE)
+        num_monitors = len(self.monitors.monitors_dictionary)
+        if num_monitors == 0:
+            GL.glFlush()
+            self.SwapBuffers()
+            return
 
-        GL.glEnable(GL.GL_LINE_STIPPLE)
-        GL.glLineStipple(1, 0x00FF)
-        GL.glColor3f(0.2, 0.3, 0.4)
-        GL.glBegin(GL.GL_LINES)
-        for i in range(num_cycles + 1):
-            x = box_x_start + (i * cycle_width)
-            GL.glVertex2f(x, box_y_bot)
-            GL.glVertex2f(x, box_y_top)
-        GL.glEnd()
-        GL.glDisable(GL.GL_LINE_STIPPLE)
+        # 3. Calculate max cycles and draw universal background vertical grids
+        visible_signals = {
+            monitor: self._visible_signal_list(signal_list)
+            for monitor, signal_list in self.monitors.monitors_dictionary.items()
+        }
+        num_cycles = max((len(lst) for lst in visible_signals.values()), default=0)
+        if num_cycles > 0:
+            cycle_width = (box_x_end - box_x_start) / num_cycles
+            
+            GL.glEnable(GL.GL_LINE_STIPPLE)
+            GL.glLineStipple(1, 0x00FF)
+            GL.glColor3f(0.2, 0.3, 0.4)
+            GL.glBegin(GL.GL_LINES)
+            for i in range(num_cycles + 1):
+                x = box_x_start + (i * cycle_width)
+                GL.glVertex2f(x, box_y_bot)
+                GL.glVertex2f(x, box_y_top)
+            GL.glEnd()
+            GL.glDisable(GL.GL_LINE_STIPPLE)
+        else:
+            # Safely exit if no simulation cycles have run yet
+            GL.glFlush()
+            self.SwapBuffers()
+            return
 
-        GL.glColor3f(0.0, 1.0, 0.4)
-        GL.glLineWidth(2.5)
-        GL.glBegin(GL.GL_LINE_STRIP)
-        for i in range(num_cycles):
-            x = box_x_start + (i * cycle_width)
-            x_next = box_x_start + ((i + 1) * cycle_width)
-            current_y = high_y if i % 2 == 0 else low_y
+        # 4. Dynamic Multi-Row Channel Rendering Loop
+        row_height = (box_y_top - box_y_bot) / num_monitors
+        for k, ((device_id, output_id), signal_list) in enumerate(visible_signals.items()):
+            # Define individualized vertical tracks for this specific row channel
+            signal_y_bot = box_y_bot + (k * row_height)
+            high_y = signal_y_bot + row_height * 0.25
+            low_y = signal_y_bot + row_height * 0.75
 
-            GL.glVertex2f(x, current_y)
-            GL.glVertex2f(x_next, current_y)
+            # Render row text identifiers and markers
+            monitor_name = self.devices.get_signal_name(device_id, output_id)
+            self.render_text(monitor_name, self.pan_x + 10, (high_y + low_y) / 2)
+            self.render_text("High", self.pan_x + 50, high_y - 4)
+            self.render_text("Low", self.pan_x + 50, low_y - 4)
 
-            if i < num_cycles - 1:
-                next_y = low_y if i % 2 == 0 else high_y
-                GL.glVertex2f(x_next, current_y)
-                GL.glVertex2f(x_next, next_y)
-        GL.glEnd()
-        GL.glLineWidth(1.0)
+            # Draw row horizontal boundary reference guidelines
+            GL.glEnable(GL.GL_LINE_STIPPLE)
+            GL.glLineStipple(1, 0x00FF)
+            GL.glColor3f(0.4, 0.4, 0.4)
+            GL.glBegin(GL.GL_LINES)
+            GL.glVertex2f(box_x_start, high_y)
+            GL.glVertex2f(box_x_end, high_y)
+            GL.glVertex2f(box_x_start, low_y)
+            GL.glVertex2f(box_x_end, low_y)
+            GL.glEnd()
+            GL.glDisable(GL.GL_LINE_STIPPLE)
+
+            # Plot live signal trace using real backend constants.
+            trace_segments = self._signal_trace_segments(
+                signal_list, box_x_start, cycle_width, high_y, low_y
+            )
+            if trace_segments:
+                GL.glColor3f(0.0, 1.0, 0.4)  # Distinct Waveform green trace
+                GL.glLineWidth(2.5)
+                GL.glBegin(GL.GL_LINES)
+                for x1, y1, x2, y2 in trace_segments:
+                    GL.glVertex2f(x1, y1)
+                    GL.glVertex2f(x2, y2)
+                GL.glEnd()
+                GL.glLineWidth(1.0)
 
         GL.glFlush()
         self.SwapBuffers()
 
-    def on_paint(self, event):
-        """Handle the paint event."""
-        self.SetCurrent(self.context)
-        if not self.init:
-            self.init_gl()
-            self.init = True
+    def _signal_trace_segments(self, signal_list, x_start, cycle_width, high_y, low_y):
+        """Return drawable line segments for a backend monitor signal list."""
+        segments = []
+        previous_y = None
 
-        size = self.GetClientSize()
-        text = "".join(
-            [
-                "Canvas redrawn on paint event, size is ",
-                str(size.width),
-                ", ",
-                str(size.height),
-            ]
-        )
-        self.render(text)
+        for i, state in enumerate(signal_list):
+            x = x_start + (i * cycle_width)
+            x_next = x_start + ((i + 1) * cycle_width)
+
+            if state == self.devices.HIGH:
+                current_y_start = high_y
+                current_y_end = high_y
+            elif state == self.devices.LOW:
+                current_y_start = low_y
+                current_y_end = low_y
+            elif state == self.devices.RISING:
+                current_y_start = low_y
+                current_y_end = high_y
+            elif state == self.devices.FALLING:
+                current_y_start = high_y
+                current_y_end = low_y
+            else:
+                previous_y = None
+                continue
+
+            if previous_y is not None and current_y_start != previous_y:
+                segments.append((x, previous_y, x, current_y_start))
+
+            segments.append((x, current_y_start, x_next, current_y_end))
+            previous_y = current_y_end
+
+        return segments
+
+    def _visible_signal_list(self, signal_list):
+        """Return the whole trace or only the configured final cycles."""
+        if self.visible_cycles is None:
+            return signal_list
+        return signal_list[-self.visible_cycles:]
+    
+    def on_paint(self, event):
+        """Handle the paint event by validating the DC and calling render."""
+        dc = wx.PaintDC(self)
+        self.render()
 
     def on_size(self, event):
         """Handle canvas resize events cleanly without duplicating ortho configurations."""
@@ -360,6 +406,11 @@ class Gui(wx.Frame):
         # Track the currently viewed file path
         self._viewer_path = path
         self._viewer_visible = False
+        self.devices = devices
+        self.names = names
+        self.network = network
+        self.monitors = monitors
+        self.cycles_completed = 0
 
         # ── Menu bar ────────────────────────────────────────────────────────
         fileMenu = wx.Menu()
@@ -435,17 +486,20 @@ class Gui(wx.Frame):
         self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1))
         self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "▶", size=(32, 28))
         self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "+10", size=(45, 28))
+        self.last_cycles_check = wx.CheckBox(self.top_panel, wx.ID_ANY, "Last")
+        self.last_cycles_spin = wx.SpinCtrl(
+            self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
+        )
 
         self.switch_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Select switch:")
-        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY,
-                                       choices=["SW1", "SW2", "SW3"])
+        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY, choices=self._get_switch_names())
         self.switch_on = wx.Button(self.top_panel, wx.ID_ANY, "Set ON")
         self.switch_off = wx.Button(self.top_panel, wx.ID_ANY, "Set OFF")
 
         self.monitors_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Monitors:")
         self.monitors_list = wx.ListBox(
             self.top_panel, wx.ID_ANY,
-            choices=["Signal1", "Signal2"],
+            choices=[],
             style=wx.LB_SINGLE
         )
         self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "+")
@@ -473,12 +527,18 @@ class Gui(wx.Frame):
         self.add_monitor_btn.SetToolTip("Add a monitor to the selected signal")
         self.remove_monitor_btn.SetToolTip("Remove the selected monitor")
         self.spin.SetToolTip("Number of cycles to run or continue")
+        self.last_cycles_check.SetToolTip("Show only the most recent cycles")
+        self.last_cycles_spin.SetToolTip("Number of recent cycles to show")
+        self.last_cycles_spin.Enable(False)
 
         # ── Event bindings ───────────────────────────────────────────────────
         self.Bind(wx.EVT_MENU, self.on_menu)
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
         self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
+        self.last_cycles_check.Bind(wx.EVT_CHECKBOX, self.on_last_cycles_change)
+        self.last_cycles_spin.Bind(wx.EVT_SPINCTRL, self.on_last_cycles_change)
+        self.last_cycles_spin.Bind(wx.EVT_TEXT, self.on_last_cycles_change)
         self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
         self.switch_off.Bind(wx.EVT_BUTTON, self.on_switch_off)
         self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
@@ -495,6 +555,15 @@ class Gui(wx.Frame):
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
+
+        view_cycles_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        view_cycles_sizer.Add(
+            self.last_cycles_check, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        view_cycles_sizer.Add(
+            self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_sizer.Add(view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3)
 
         # Buttons laid out side-by-side
         sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -556,6 +625,7 @@ class Gui(wx.Frame):
 
         # Initialise scrollbar state
         self.update_scrollbars()
+        self.update_monitors_list()
 
         # Load the initial file into the viewer if one was provided
         if path:
@@ -715,6 +785,41 @@ class Gui(wx.Frame):
 
     # ── Widget event handlers ─────────────────────────────────────────────────
 
+    def run_network(self, cycles):
+        """Run the backend network and record monitor signals for each cycle."""
+        for _ in range(cycles):
+            if self.network.execute_network():
+                self.monitors.record_signals()
+            else:
+                self.SetStatusText("Error: network oscillating.")
+                self.log("Error: network oscillating.")
+                return False
+        return True
+
+    def update_monitors_list(self):
+        """Refresh the monitor list from backend monitor state."""
+        monitored_signals, non_monitored_signals = self.monitors.get_signal_names()
+        display_names = [name + " (on)" for name in monitored_signals]
+        display_names.extend(non_monitored_signals)
+        self.monitors_list.Set(display_names)
+        self._monitor_choices = {
+            name + " (on)": name for name in monitored_signals
+        }
+        self._monitor_choices.update({name: name for name in non_monitored_signals})
+
+    def on_last_cycles_change(self, event):
+        """Update the canvas cycle-window view."""
+        if self.last_cycles_check.GetValue():
+            visible_cycles = self.last_cycles_spin.GetValue()
+            self.last_cycles_spin.Enable(True)
+            self.canvas.visible_cycles = visible_cycles
+            self.SetStatusText("Showing last " + str(visible_cycles) + " cycles.")
+        else:
+            self.last_cycles_spin.Enable(False)
+            self.canvas.visible_cycles = None
+            self.SetStatusText("Showing all recorded cycles.")
+        self.canvas.render()
+
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
@@ -735,13 +840,31 @@ class Gui(wx.Frame):
         cycles = self.spin.GetValue()
         self.SetStatusText("Running for " + str(cycles) + " cycles...")
         self.log("Run clicked: " + str(cycles) + " cycles requested.")
-        self.canvas.render("")
+        self.cycles_completed = 0
+        self.monitors.reset_monitors()
+        self.devices.cold_startup()
+        if self.run_network(cycles):
+            self.cycles_completed = cycles
+            self.SetStatusText("Completed " + str(cycles) + " cycles.")
+            self.log("Completed " + str(cycles) + " cycles.")
+        self.update_monitors_list()
+        self.canvas.render()
 
     def on_continue_button(self, event):
         """Handle the event when the user clicks the continue button."""
         cycles = self.spin.GetValue()
+        if self.cycles_completed == 0:
+            self.SetStatusText("Error: nothing to continue. Run first.")
+            self.log("Continue ignored: run the simulation first.")
+            return
         self.SetStatusText("Continuing for " + str(cycles) + " cycles...")
         self.log("Continue clicked: " + str(cycles) + " cycles requested.")
+        if self.run_network(cycles):
+            self.cycles_completed += cycles
+            self.SetStatusText("Completed " + str(self.cycles_completed) + " cycles.")
+            self.log("Completed " + str(self.cycles_completed) + " total cycles.")
+        self.update_monitors_list()
+        self.canvas.render()
 
     def on_switch_on(self, event):
         """Handle the event when the user clicks the switch on button."""
@@ -749,9 +872,14 @@ class Gui(wx.Frame):
         if selection == wx.NOT_FOUND:
             self.SetStatusText("Error: please select a switch first.")
             return
-        switch = self.switch_choice.GetString(selection)
-        self.SetStatusText("Switch " + switch + " set ON.")
-        self.log("Switch " + switch + " set ON.")
+        switch_name = self.switch_choice.GetString(selection)
+        switch_id = self.names.query(switch_name)
+        if self.devices.set_switch(switch_id, self.devices.HIGH):
+            self.SetStatusText(f"Switch {switch_name} set ON.")
+            self.log(f"Switch {switch_name} set ON.")
+            self.canvas.render()
+        else:
+            self.SetStatusText(f"Error: could not set switch {switch_name}.")
 
     def on_switch_off(self, event):
         """Handle the event when the user clicks the switch off button."""
@@ -759,24 +887,71 @@ class Gui(wx.Frame):
         if selection == wx.NOT_FOUND:
             self.SetStatusText("Error: please select a switch first.")
             return
-        switch = self.switch_choice.GetString(selection)
-        self.SetStatusText("Switch " + switch + " set OFF.")
-        self.log("Switch " + switch + " set OFF.")
+        switch_name = self.switch_choice.GetString(selection)
+        switch_id = self.names.query(switch_name)
+        if self.devices.set_switch(switch_id, self.devices.LOW):
+            self.SetStatusText(f"Switch {switch_name} set OFF.")
+            self.log(f"Switch {switch_name} set OFF.")
+            self.canvas.render()
+        else:
+            self.SetStatusText(f"Error: could not set switch {switch_name}.")
 
     def on_add_monitor(self, event):
         """Handle the event when the user clicks the add monitor button."""
-        text = "Add monitor pressed."
-        self.canvas.render(text)
-        self.log("Add monitor pressed.")
+        selection = self.monitors_list.GetSelection()
+        if selection == wx.NOT_FOUND:
+            self.SetStatusText("Error: please select a signal first.")
+            return
+
+        display_name = self.monitors_list.GetString(selection)
+        signal_name = self._monitor_choices.get(display_name, display_name)
+        signal_ids = self.devices.get_signal_ids(signal_name)
+        if signal_ids is None:
+            self.SetStatusText("Error: selected signal was not found.")
+            return
+
+        device_id, output_id = signal_ids
+        monitor_error = self.monitors.make_monitor(
+            device_id, output_id, self.cycles_completed
+        )
+        if monitor_error == self.monitors.NO_ERROR:
+            self.SetStatusText("Added monitor: " + signal_name)
+            self.log("Added monitor: " + signal_name)
+        elif monitor_error == self.monitors.MONITOR_PRESENT:
+            self.SetStatusText("Monitor already active: " + signal_name)
+        else:
+            self.SetStatusText("Error: could not add monitor " + signal_name)
+        self.update_monitors_list()
+        self.canvas.render()
 
     def on_remove_monitor(self, event):
         """Handle the event when the user clicks the remove monitor button."""
-        text = "Remove monitor pressed."
-        self.canvas.render(text)
-        self.log("Remove monitor pressed.")
+        selection = self.monitors_list.GetSelection()
+        if selection == wx.NOT_FOUND:
+            self.SetStatusText("Error: please select a monitor first.")
+            return
+
+        display_name = self.monitors_list.GetString(selection)
+        signal_name = self._monitor_choices.get(display_name, display_name)
+        signal_ids = self.devices.get_signal_ids(signal_name)
+        if signal_ids is None:
+            self.SetStatusText("Error: selected signal was not found.")
+            return
+
+        device_id, output_id = signal_ids
+        if self.monitors.remove_monitor(device_id, output_id):
+            self.SetStatusText("Removed monitor: " + signal_name)
+            self.log("Removed monitor: " + signal_name)
+        else:
+            self.SetStatusText("Error: monitor is not active: " + signal_name)
+        self.update_monitors_list()
+        self.canvas.render()
 
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
+        self.cycles_completed = 0
+        self.monitors.reset_monitors()
+        self.devices.cold_startup()
         self.SetStatusText("Simulation reset.")
         self.canvas.render("Simulation reset.")
         self.log("Simulation reset.")
@@ -893,6 +1068,11 @@ class Gui(wx.Frame):
         dlg = wx.MessageDialog(self, help_text, "GUI Usage Guide", wx.OK | wx.ICON_INFORMATION)
         dlg.ShowModal()
         dlg.Destroy()
+    
+    def _get_switch_names(self):
+        """Return a list of switch device name strings from the backend."""
+        switch_ids = self.devices.find_devices(self.devices.SWITCH)
+        return [self.names.get_name_string(sid) for sid in switch_ids]
 
     
     
