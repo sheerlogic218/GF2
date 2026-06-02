@@ -660,9 +660,15 @@ class Gui(wx.Frame):
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
         self._viewer_title.SetFont(title_font)
 
+        self._viewer_title.SetMinSize((50, -1))
+
         save_btn = wx.Button(self.viewer_panel, label="Save", size=(50, 28))
         save_btn.SetToolTip("Save changes to file")
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
+
+        implement_btn = wx.Button(self.viewer_panel, label="Implement", size=(80, 28))
+        implement_btn.SetToolTip("Run the simulator using this file")
+        implement_btn.Bind(wx.EVT_BUTTON, self._on_implement_viewer)
 
         close_btn = wx.Button(self.viewer_panel, label="X", size=(28, 28))
         close_btn.SetToolTip("Close file viewer")
@@ -670,6 +676,7 @@ class Gui(wx.Frame):
 
         header_sizer.Add(self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6)
         header_sizer.Add(save_btn, 0, wx.ALL, 2)
+        header_sizer.Add(implement_btn, 0, wx.ALL, 2)
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
 
         # Read-only text area with monospace font
@@ -743,6 +750,65 @@ class Gui(wx.Frame):
                 f"Could not save file:\n{exc}",
                 "Save Error", wx.ICON_ERROR | wx.OK
             )
+
+    def _save_viewer_contents(self):
+        """Save viewer contents and return whether it succeeded."""
+        if not self._viewer_path:
+            wx.MessageBox(
+                "No file is open - nothing to implement.",
+                "Implement", wx.ICON_WARNING | wx.OK
+            )
+            return False
+        try:
+            with open(self._viewer_path, "w") as fh:
+                fh.write(self._file_text.GetValue())
+            self.SetStatusText(f"Saved: {self._viewer_path}")
+            self.log(f"File saved: {self._viewer_path}")
+            return True
+        except OSError as exc:
+            wx.MessageBox(
+                f"Could not save file:\n{exc}",
+                "Save Error", wx.ICON_ERROR | wx.OK
+            )
+            return False
+
+    def _on_implement_viewer(self, event):
+        """Use the file currently shown in the viewer as the active circuit."""
+        if not self._save_viewer_contents():
+            return
+
+        names = Names()
+        devices = Devices(names)
+        network = Network(names, devices)
+        monitors = Monitors(names, devices, network)
+        scanner = Scanner(self._viewer_path, names)
+        parser = Parser(names, devices, network, monitors, scanner)
+
+        if not parser.parse_network():
+            wx.MessageBox(
+                "Could not implement this file because it contains errors.",
+                "Implement Error", wx.ICON_ERROR | wx.OK
+            )
+            self.SetStatusText("Implement failed: parse errors in file.")
+            self.log("Implement failed: parse errors in " + self._viewer_path)
+            return
+
+        self.names = names
+        self.devices = devices
+        self.network = network
+        self.monitors = monitors
+        self.cycles_completed = 0
+        self.canvas.devices = devices
+        self.canvas.monitors = monitors
+        self.canvas.previous_signal_traces = {}
+
+        self.switch_choice.Set(self._get_switch_names())
+        self.update_monitors_list()
+        self.update_scrollbars()
+        self.canvas.render()
+        self.SetTitle("Logic Simulator - " + self._viewer_path)
+        self.SetStatusText("Implemented: " + self._viewer_path)
+        self.log("Implemented file: " + self._viewer_path)
 
     def _on_close_viewer(self, event):
         """Handle the X button inside the viewer panel."""
