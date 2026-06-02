@@ -7,6 +7,7 @@ names
 scanner
 parse
 gui
+IMPLEMENT D-TYPES
 
 
 error handling:

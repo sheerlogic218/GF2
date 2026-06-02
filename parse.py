@@ -50,6 +50,9 @@ class Parser:
         self.error_count = 0
         self.current_module_name = None
 
+        # dict of module names: [[inputs],[outputs]]
+        self.module_mappings = {}
+
     def generate_symbols(self):
         """Deprecated."""
         symbols = []
@@ -110,9 +113,11 @@ class Parser:
 
         self.expect(Symbol.PUNCTUATION, ":")
 
-        self.parse_port_list()
+        module_inputs = self.parse_port_list()
         self.expect(Symbol.PUNCTUATION, "->")
-        self.parse_port_list()
+        module_outputs = self.parse_port_list()
+
+        self.module_mappings[self.current_module_name] = [[module_inputs], [module_outputs]]
 
         self.expect(Symbol.PUNCTUATION, ";")
 
@@ -127,16 +132,28 @@ class Parser:
         self.expect(Symbol.PUNCTUATION, ";")
 
     def parse_port_list(self):
+        ports = []
         if self.symbol.type == Symbol.NAME:
-            self.parse_port()
+            ports.append(self.parse_port())
             while self.accept(Symbol.PUNCTUATION, ","):
-                self.parse_port()
+                ports.append(self.parse_port())
 
     def parse_port(self):
         self.expect(Symbol.NAME)
+
+        if self.symbol.type == Symbol.NAME:
+            port_name = f"__{self.current_module_name}__{self.symbol.text}"
+            self.next_symbol()
+            return port_name
+        else:
+            self.expect(Symbol.NAME)
+
+
+        # marked for removal pending bit slicing decision
         if self.accept(Symbol.PUNCTUATION, "["):
             self.expect(Symbol.NUMBER)
             self.expect(Symbol.PUNCTUATION, "]")
+
 
     def parse_statement(self):
         if self.symbol.type == Symbol.KEYWORD:
@@ -165,7 +182,7 @@ class Parser:
     def parse_declaration(self):
         if self.accept(Symbol.KEYWORD, "wire"):
             if self.symbol.type == Symbol.NAME:
-                wire_name = self.symbol.text
+                wire_name = f"__{self.current_module_name}__{self.symbol.text}"
                 [wire_id] = self.names.lookup([wire_name])
                 self.next_symbol()
 
@@ -181,7 +198,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "clock"):
             if self.symbol.type == Symbol.NAME:
-                clock_name = self.symbol.text
+                clock_name = f"__{self.current_module_name}__{self.symbol.text}"
                 [clock_id] = self.names.lookup([clock_name])
                 self.next_symbol()
             else:
@@ -205,7 +222,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "switch"):
             if self.symbol.type == Symbol.NAME:
-                switch_name = self.symbol.text
+                switch_name = f"__{self.current_module_name}__{self.symbol.text}"
                 [switch_id] = self.names.lookup([switch_name])
                 self.next_symbol()
             else:
@@ -227,7 +244,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "dtype"):
             if self.symbol.type == Symbol.NAME:
-                dtype_name = self.symbol.text
+                dtype_name = f"__{self.current_module_name}__{self.symbol.text}"
                 [dtype_id] = self.names.lookup([dtype_name])
                 self.next_symbol()
             else:
@@ -287,7 +304,7 @@ class Parser:
         if len(inputs) == 1:
             return inputs[0]
 
-        gate_name = f"__{gate_type}__{uuid.uuid4().hex}"
+        gate_name = f"__{gate_type}__{self.current_module_name}__{uuid.uuid4().hex}"
         [gate_id] = self.names.lookup([gate_name])
 
         if gate_type == "XOR" and len(inputs) == 2:
@@ -326,7 +343,7 @@ class Parser:
 
         # If there's a NOT operator (!), instantiate a 1-input NAND gate as an inverter
         if invert:
-            gate_name = f"__NOT_{uuid.uuid4().hex[:8]}"
+            gate_name = f"__NOT__{self.current_module_name}__{uuid.uuid4().hex}"
             [gate_id] = self.names.lookup([gate_name])
 
             # A 1-input NAND functions as a NOT gate in this architecture
@@ -341,7 +358,7 @@ class Parser:
     def parse_signal_or_port_ref(self):
         """Parse a reference to a device or a specific port[cite: 20]."""
         # Capture the device name
-        name = self.symbol.text
+        name = f"__{self.current_module_name}__{self.symbol.text}"
         [device_id] = self.names.lookup([name])
         self.expect(Symbol.NAME)
 
@@ -399,6 +416,13 @@ class Parser:
         self.expect(Symbol.PUNCTUATION, ";")
 
         # check form of I/O against module def
+        expected_inputs, expected_outputs = self.module_mappings[module_name]
+        if len(module_inputs) != len(expected_inputs):
+            self.error_count += 1
+        if len(module_outputs) != len(expected_outputs):
+            self.error_count += 1
+
+
         # re-instantiate the module in this place
 
     def parse_bind_list(self):

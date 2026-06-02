@@ -78,6 +78,8 @@ def main(arg_list):
             for device in parser.devices.devices_list:
                 print(parser.names.inv_name_IDS[device.device_kind])
 
+            print(parser.module_mappings)
+
             # Initialise an instance of the gui.Gui() class
             app = wx.App()
             gui = Gui("Logic Simulator", path, names, devices, network, monitors)

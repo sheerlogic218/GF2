@@ -74,16 +74,18 @@ def process_expressions(expression: str, mapping: dict) -> list:
         for and_input in and_gate_inputs:
             if mapping.get(and_input):
                 and_input = mapping[and_input]
-            # print(and_input)
 
     return 9999
 
 
-expression, mappings = separate_brackets(G3)
+# expression, mappings = separate_brackets(G3)
+#
+# print(f"expression: {expression}")
+# print(f"mappings:  {mappings}")
+#
+#
+# print()
+# print(process_expressions(expression, mappings))
 
-print(f"expression: {expression}")
-print(f"mappings:  {mappings}")
-
-
-print()
-print(process_expressions(expression, mappings))
+this = "__gate__aghsdjkaghsd"
+print(this.split("__")[1])
