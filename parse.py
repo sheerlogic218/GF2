@@ -142,7 +142,7 @@ class Parser:
         self.expect(Symbol.NAME)
 
         if self.symbol.type == Symbol.NAME:
-            port_name = f"__{self.current_module_name}__{self.symbol.text}"
+            port_name = f"__{self.symbol.text}__{self.current_module_name}__"
             self.next_symbol()
             return port_name
         else:
@@ -182,7 +182,7 @@ class Parser:
     def parse_declaration(self):
         if self.accept(Symbol.KEYWORD, "wire"):
             if self.symbol.type == Symbol.NAME:
-                wire_name = f"__{self.current_module_name}__{self.symbol.text}"
+                wire_name = f"__{self.symbol.text}__{self.current_module_name}__"
                 [wire_id] = self.names.lookup([wire_name])
                 self.next_symbol()
 
@@ -198,7 +198,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "clock"):
             if self.symbol.type == Symbol.NAME:
-                clock_name = f"__{self.current_module_name}__{self.symbol.text}"
+                clock_name = f"__{self.symbol.text}__{self.current_module_name}__"
                 [clock_id] = self.names.lookup([clock_name])
                 self.next_symbol()
             else:
@@ -222,7 +222,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "switch"):
             if self.symbol.type == Symbol.NAME:
-                switch_name = f"__{self.current_module_name}__{self.symbol.text}"
+                switch_name = f"__{self.symbol.text}__{self.current_module_name}__"
                 [switch_id] = self.names.lookup([switch_name])
                 self.next_symbol()
             else:
@@ -244,7 +244,7 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "dtype"):
             if self.symbol.type == Symbol.NAME:
-                dtype_name = f"__{self.current_module_name}__{self.symbol.text}"
+                dtype_name = f"__{self.symbol.text}__{self.current_module_name}__"
                 [dtype_id] = self.names.lookup([dtype_name])
                 self.next_symbol()
             else:
@@ -358,7 +358,7 @@ class Parser:
     def parse_signal_or_port_ref(self):
         """Parse a reference to a device or a specific port[cite: 20]."""
         # Capture the device name
-        name = f"__{self.current_module_name}__{self.symbol.text}"
+        name = f"__{self.symbol.text}__{self.current_module_name}__"
         [device_id] = self.names.lookup([name])
         self.expect(Symbol.NAME)
 
