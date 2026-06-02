@@ -48,6 +48,7 @@ class Parser:
         self.scanner = scanner
         self.symbol = None
         self.error_count = 0
+        self.current_module_name = None
 
     def generate_symbols(self):
         """Deprecated."""
@@ -99,7 +100,14 @@ class Parser:
 
     def parse_prog_defn(self):
         self.expect(Symbol.KEYWORD, "module")
-        self.expect(Symbol.NAME)
+
+        if self.symbol.type == Symbol.NAME:
+            self.current_module_name = self.symbol.text
+            self.next_symbol()
+        else:
+            # error handling
+            self.expect(Symbol.NAME)
+
         self.expect(Symbol.PUNCTUATION, ":")
 
         self.parse_port_list()
