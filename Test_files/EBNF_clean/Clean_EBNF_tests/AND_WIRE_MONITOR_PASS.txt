@@ -5,7 +5,7 @@ module and_gate : -> ;
  
     wire out ;
  
-    out = A * B ;
+    out = A + B ;
  
     monitor out ;
  
