@@ -53,6 +53,9 @@ class Parser:
         # dict of module names: [[inputs],[outputs]]
         self.module_mappings = {}
 
+        # dict of gate:count
+        self.gate_counts = {}
+
     def generate_symbols(self):
         """Deprecated."""
         symbols = []
@@ -304,7 +307,9 @@ class Parser:
         if len(inputs) == 1:
             return inputs[0]
 
-        gate_name = f"__{gate_type}__{self.current_module_name}__{uuid.uuid4().hex}"
+        #current count of gate type
+        self.gate_counts[gate_type] += 1
+        gate_name = f"__{gate_type} {self.gate_counts[gate_type]}__{self.current_module_name}__{uuid.uuid4().hex}"
         [gate_id] = self.names.lookup([gate_name])
 
         if gate_type == "XOR" and len(inputs) == 2:
