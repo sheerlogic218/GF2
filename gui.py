@@ -660,6 +660,8 @@ class Gui(wx.Frame):
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
         self._viewer_title.SetFont(title_font)
 
+        self._viewer_title.SetMinSize((50, -1))
+
         save_btn = wx.Button(self.viewer_panel, label="Save", size=(50, 28))
         save_btn.SetToolTip("Save changes to file")
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
