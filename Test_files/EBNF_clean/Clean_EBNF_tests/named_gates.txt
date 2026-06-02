@@ -1,0 +1,40 @@
+//  Sub-module: 2-input NAND named james 
+module nand_james : A , B -> Y ;
+
+    wire Y ;
+    Y = !(A * B) ;
+
+    monitor Y ;
+
+end ;
+
+// Sub-module: 2-input NAND named adam 
+module nand_adam : A , B -> Y ;
+
+    wire Y ;
+    Y = !(A * B) ;
+
+    monitor Y ;
+
+end ;
+
+// Top-level module 
+module top : -> out1 , out2 ;
+
+    switch sw_a = 1 ;
+    switch sw_b = 0 ;
+    switch sw_c = 1 ;
+
+    wire out1 ;
+    wire out2 ;
+
+    // Nand gate named james
+    instance nand_james ( sw_a , sw_b -> out1 ) ;
+
+    // Nand gate names adam
+    instance nand_adam ( sw_b , sw_c -> out2 ) ;
+
+    monitor out1 ;
+    monitor out2 ;
+
+end ;

@@ -1,0 +1,13 @@
+module top_module : a, b, c, d -> out_sop, out_pos ;
+
+    // sum of products expression
+    out_sop = (c * d) + (c * !a * !b) ;
+
+    // product of sums expression
+    out_pos = c * (b + !a) * (!b + !c + d) ;
+
+    // Simulation monitors
+    monitor out_sop ;
+    monitor out_pos ;
+
+end ;
