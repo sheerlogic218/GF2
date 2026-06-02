@@ -884,8 +884,8 @@ class Gui(wx.Frame):
     def update_monitors_list(self):
         """Refresh the monitor list from backend monitor state."""
         monitored_signals, non_monitored_signals = self.monitors.get_signal_names()
-        display_names = [name + " (on)" for name in monitored_signals]
-        display_names.extend(non_monitored_signals)
+        display_names = [name.split("__")[1] + " (on)" for name in monitored_signals]
+        display_names.extend([name.split("__")[1] for name in non_monitored_signals])
         self.monitors_list.Set(display_names)
         self._monitor_choices = {
             name + " (on)": name for name in monitored_signals
