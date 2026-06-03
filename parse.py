@@ -120,7 +120,10 @@ class Parser:
         self.expect(Symbol.PUNCTUATION, "->")
         module_outputs = self.parse_port_list()
 
-        self.module_mappings[self.current_module_name] = [[module_inputs], [module_outputs]]
+        self.module_mappings[self.current_module_name] = [
+            [module_inputs],
+            [module_outputs],
+        ]
 
         self.expect(Symbol.PUNCTUATION, ";")
 
@@ -151,12 +154,10 @@ class Parser:
         else:
             self.expect(Symbol.NAME)
 
-
         # marked for removal pending bit slicing decision
         if self.accept(Symbol.PUNCTUATION, "["):
             self.expect(Symbol.NUMBER)
             self.expect(Symbol.PUNCTUATION, "]")
-
 
     def parse_statement(self):
         if self.symbol.type == Symbol.KEYWORD:
@@ -307,8 +308,11 @@ class Parser:
         if len(inputs) == 1:
             return inputs[0]
 
-        #current count of gate type
+        # current count of gate type
+        if self.gate_counts.get(gate_type) is None:
+            self.gate_counts[gate_type] = 0
         self.gate_counts[gate_type] += 1
+
         gate_name = f"__{gate_type} {self.gate_counts[gate_type]}__{self.current_module_name}__{uuid.uuid4().hex}"
         [gate_id] = self.names.lookup([gate_name])
 
@@ -426,7 +430,6 @@ class Parser:
             self.error_count += 1
         if len(module_outputs) != len(expected_outputs):
             self.error_count += 1
-
 
         # re-instantiate the module in this place
 
