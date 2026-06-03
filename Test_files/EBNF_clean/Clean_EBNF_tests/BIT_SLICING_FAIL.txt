@@ -1,0 +1,7 @@
+module my_module input1[3], input2[0] -> output1[2];
+
+	output1[2] = input1[3] + input2[0];
+
+	monitor output1[2];
+
+end;

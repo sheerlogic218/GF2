@@ -1,5 +1,8 @@
-module top_module : a, b, c, d -> out_sop, out_pos ;
-
+module top_module : -> out_sop, out_pos ;
+    switch a = 0;
+    switch b = 0;
+    switch c = 0;
+    switch d = 0;
     // sum of products expression
     out_sop = (c * d) + (c * !a * !b) ;
 
