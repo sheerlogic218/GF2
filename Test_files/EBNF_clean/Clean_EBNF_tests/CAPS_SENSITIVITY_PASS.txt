@@ -1,0 +1,12 @@
+module my_module: -> applE;
+	switch apple = 0;
+	switch applE = 0;
+	
+	applE = apple^applE;
+	
+	monitor applE;
+
+end;
+	
+
+	

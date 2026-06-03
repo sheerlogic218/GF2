@@ -1,0 +1,16 @@
+module d_flip_flop : -> y;
+ 
+    switch D  = 0 ;
+    clock clk [2] ;
+    dtype FF ;
+ 
+    FF.CLK   <= clk ;
+    FF.DATA  <= D ;
+    FF.SET   <= 0 ;
+    FF.CLEAR <= 0 ;
+	
+    y = FF.CLK ; 
+    monitor FF.Q ;
+    monitor FF.QBAR ;
+ 
+end ;

@@ -1,0 +1,7 @@
+module driven_clock : -> ;
+	switch a = 0;
+	switch b = 0;
+	clock driven_clock[2];
+	driven_clock = a+b;
+	monitor driven_clock;
+end;
