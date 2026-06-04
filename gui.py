@@ -9,17 +9,18 @@ MyGLCanvas - handles all canvas drawing operations.
 Gui - configures the main window and all the widgets.
 """
 
-from numpy import size
+import datetime
+
 import wx
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
-import datetime
-from names import Names
+
 from devices import Devices
-from network import Network
 from monitors import Monitors
-from scanner import Scanner
+from names import Names
+from network import Network
 from parse import Parser
+from scanner import Scanner
 
 # Custom menu ID for the file viewer toggle
 ID_TOGGLE_VIEWER = wx.NewIdRef()
@@ -78,9 +79,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
 
-        zoom_factor = getattr(self, 'zoom', 1.0)
-        pan_x_pct = getattr(self, 'pan_x_pct', 0.0)
-        pan_y_pct = getattr(self, 'pan_y_pct', 0.0)
+        zoom_factor = getattr(self, "zoom", 1.0)
+        pan_x_pct = getattr(self, "pan_x_pct", 0.0)
+        pan_y_pct = getattr(self, "pan_y_pct", 0.0)
 
         visible_width = width / zoom_factor
         visible_height = height / zoom_factor
@@ -101,7 +102,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glLoadIdentity()
 
     def render(self, text=""):
-        """Render the canvas graphics, plotting active monitor waveforms dynamically."""
+        """Render the canvas graphics, plotting active monitor
+        waveforms dynamically."""
         self.SetCurrent(self.context)
         if not self.init:
             self.init_gl()
@@ -125,7 +127,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
-        num_monitors = len(self.monitors.monitors_dictionary)
+        num_monitors = len(self.monitors.monitors_dict)
         if num_monitors == 0:
             GL.glFlush()
             self.SwapBuffers()
@@ -134,12 +136,14 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         # 3. Calculate max cycles and draw universal background vertical grids
         visible_signals = {
             monitor: self._visible_signal_list(monitor, signal_list)
-            for monitor, signal_list in self.monitors.monitors_dictionary.items()
+            for monitor, signal_list in self.monitors.monitors_dict.items()
         }
-        num_cycles = max((len(lst) for lst in visible_signals.values()), default=0)
+        num_cycles = max(
+            (len(lst) for lst in visible_signals.values()), default=0
+        )
         if num_cycles > 0:
             cycle_width = (box_x_end - box_x_start) / num_cycles
-            
+
             GL.glEnable(GL.GL_LINE_STIPPLE)
             GL.glLineStipple(1, 0x00FF)
             GL.glColor3f(0.2, 0.3, 0.4)
@@ -158,7 +162,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # 4. Dynamic Multi-Row Channel Rendering Loop
         row_height = (box_y_top - box_y_bot) / num_monitors
-        for k, ((device_id, output_id), signal_list) in enumerate(visible_signals.items()):
+        for k, ((device_id, output_id), signal_list) in enumerate(
+            visible_signals.items()
+        ):
             # Define individualized vertical tracks for this specific row channel
             signal_y_bot = box_y_bot + (k * row_height)
             high_y = signal_y_bot + row_height * 0.25
@@ -166,7 +172,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
             # Render row text identifiers and markers
             monitor_name = self.devices.get_signal_name(device_id, output_id)
-            self.render_text(monitor_name, self.pan_x + 10, (high_y + low_y) / 2)
+            self.render_text(
+                monitor_name, self.pan_x + 10, (high_y + low_y) / 2
+            )
             self.render_text("High", self.pan_x + 50, high_y - 4)
             self.render_text("Low", self.pan_x + 50, low_y - 4)
 
@@ -195,10 +203,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                     GL.glVertex2f(x2, y2)
                 GL.glEnd()
                 GL.glLineWidth(1.0)
-            
+
             if k < num_monitors - 1:
                 channel_divider_y = signal_y_bot + row_height
-                GL.glColor3f(0.3, 0.4, 0.5)  
+                GL.glColor3f(0.3, 0.4, 0.5)
                 GL.glLineWidth(2.0)
                 GL.glBegin(GL.GL_LINES)
                 GL.glVertex2f(box_x_start, channel_divider_y)
@@ -208,7 +216,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glFlush()
         self.SwapBuffers()
 
-    def _signal_trace_segments(self, signal_list, x_start, cycle_width, high_y, low_y):
+    def _signal_trace_segments(
+        self, signal_list, x_start, cycle_width, high_y, low_y
+    ):
         """Return drawable line segments for a backend monitor signal list."""
         segments = []
         previous_y = None
@@ -246,8 +256,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         if self.visible_cycles is None:
             return signal_list
         previous_signal_list = self.previous_signal_traces.get(monitor, [])
-        return (previous_signal_list + signal_list)[-self.visible_cycles:]
-    
+        return (previous_signal_list + signal_list)[-self.visible_cycles :]
+
     def on_paint(self, event):
         """Handle the paint event by validating the DC and calling render."""
         dc = wx.PaintDC(self)
@@ -257,10 +267,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         """Handle canvas resize events cleanly without duplicating ortho configurations."""
         self.init = False
         self.Refresh()
-    
+
         # Notify Gui to update scrollbars on resize
         gui = wx.GetTopLevelParent(self)
-        if gui and hasattr(gui, 'update_scrollbars'):
+        if gui and hasattr(gui, "update_scrollbars"):
             gui.update_scrollbars()
 
     def on_mouse(self, event):
@@ -270,7 +280,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.SetFocus()
         # Find the parent Gui frame to trigger scrollbar updates
         gui = wx.GetTopLevelParent(self)
-        if gui and hasattr(gui, 'update_scrollbars'):
+        if gui and hasattr(gui, "update_scrollbars"):
             gui.update_scrollbars()
 
         # Handle mouse wheel zooming
@@ -294,8 +304,12 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
                 self.pan_x = max(0.0, min(self.pan_x, max_pan_x))
                 self.pan_y = max(0.0, min(self.pan_y, max_pan_y))
-                self.pan_x_pct = self.pan_x / max_pan_x if max_pan_x > 0 else 0.0
-                self.pan_y_pct = self.pan_y / max_pan_y if max_pan_y > 0 else 0.0
+                self.pan_x_pct = (
+                    self.pan_x / max_pan_x if max_pan_x > 0 else 0.0
+                )
+                self.pan_y_pct = (
+                    self.pan_y / max_pan_y if max_pan_y > 0 else 0.0
+                )
 
                 self.init = False
                 self.Refresh()
@@ -335,7 +349,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.Refresh()
             if gui:
                 gui.update_scrollbars()
-    
+
     def on_right_click(self, event):
         """Show a context menu on right click."""
         menu = wx.Menu()
@@ -345,7 +359,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         copy_item = menu.Append(wx.ID_ANY, "Copy Image")
 
         gui = wx.GetTopLevelParent(self)
-        if gui and hasattr(gui, 'update_scrollbars'):
+        if gui and hasattr(gui, "update_scrollbars"):
             gui.update_scrollbars()
 
         self.Bind(wx.EVT_MENU, self.on_save_image, save_item)
@@ -359,24 +373,35 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         size = self.GetClientSize()
         bitmap = wx.Bitmap(size.width, size.height)
         dc = wx.MemoryDC(bitmap)
-        dc.Blit(0, 0, size.width, size.height,wx.ClientDC(self), 0, 0)
+        dc.Blit(0, 0, size.width, size.height, wx.ClientDC(self), 0, 0)
         dc.SelectObject(wx.NullBitmap)
         return bitmap
 
     def on_save_image(self, event):
         """Save the canvas contents to an image file."""
         wildcard = "PNG files (*.png)|*.png|JPEG files (*.jpg)|*.jpg"
-        dlg = wx.FileDialog(self, "Save Image", wildcard=wildcard,style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        dlg = wx.FileDialog(
+            self,
+            "Save Image",
+            wildcard=wildcard,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        )
         if dlg.ShowModal() == wx.ID_OK:
             path = dlg.GetPath()
-            fmt = wx.BITMAP_TYPE_JPEG if path.endswith(".jpg") else wx.BITMAP_TYPE_PNG
+            fmt = (
+                wx.BITMAP_TYPE_JPEG
+                if path.endswith(".jpg")
+                else wx.BITMAP_TYPE_PNG
+            )
             self._capture_bitmap().SaveFile(path, fmt)
         dlg.Destroy()
 
     def on_copy_image(self, event):
         """Copy the canvas contents to the clipboard."""
         if wx.TheClipboard.Open():
-            wx.TheClipboard.SetData(wx.BitmapDataObject(self._capture_bitmap()))
+            wx.TheClipboard.SetData(
+                wx.BitmapDataObject(self._capture_bitmap())
+            )
             wx.TheClipboard.Close()
 
     def render_text(self, text, x_pos, y_pos):
@@ -391,13 +416,13 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glRasterPos2f(x_pos, y_pos)
             else:
                 GLUT.glutBitmapCharacter(font, ord(character))
-    
+
     def on_key_down(self, event):
         """Zoom in/out with Ctrl+= or Ctrl+- when canvas has focus."""
         if event.ControlDown():
             key = event.GetKeyCode()
             gui = wx.GetTopLevelParent(self)
-            while gui and not hasattr(gui, 'on_zoom_in'):
+            while gui and not hasattr(gui, "on_zoom_in"):
                 gui = gui.GetParent()
             if gui:
                 if key in (wx.WXK_NUMPAD_ADD, ord("="), ord("+")):
@@ -430,8 +455,6 @@ class Gui(wx.Frame):
         fileMenu.AppendSeparator()
         fileMenu.Append(wx.ID_ABOUT, "&About")
         fileMenu.Append(wx.ID_EXIT, "&Exit")
-
-
 
         viewMenu = wx.Menu()
         self._viewer_menu_item = viewMenu.AppendCheckItem(
@@ -494,45 +517,67 @@ class Gui(wx.Frame):
 
         # ── Widgets ──────────────────────────────────────────────────────────
         self.cycles_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Cycles")
-        self.spin = wx.SpinCtrl(self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1))
-        self.run_button = wx.Button(self.top_panel, wx.ID_ANY, "▶", size=(32, 28))
-        self.continue_button = wx.Button(self.top_panel, wx.ID_ANY, "+10", size=(45, 28))
+        self.spin = wx.SpinCtrl(
+            self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
+        )
+        self.run_button = wx.Button(
+            self.top_panel, wx.ID_ANY, "▶", size=(32, 28)
+        )
+        self.continue_button = wx.Button(
+            self.top_panel, wx.ID_ANY, "+10", size=(45, 28)
+        )
         self.last_cycles_check = wx.CheckBox(self.top_panel, wx.ID_ANY, "Last")
         self.last_cycles_spin = wx.SpinCtrl(
             self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
         )
 
-        self.switch_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Select switch:")
-        self.switch_choice = wx.Choice(self.top_panel, wx.ID_ANY, choices=self._get_switch_names())
+        self.switch_label = wx.StaticText(
+            self.top_panel, wx.ID_ANY, "Select switch:"
+        )
+        self.switch_choice = wx.Choice(
+            self.top_panel, wx.ID_ANY, choices=self._get_switch_names()
+        )
         self.switch_on = wx.Button(self.top_panel, wx.ID_ANY, "Set ON")
         self.switch_off = wx.Button(self.top_panel, wx.ID_ANY, "Set OFF")
 
-        self.monitors_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Monitors:")
+        self.monitors_label = wx.StaticText(
+            self.top_panel, wx.ID_ANY, "Monitors:"
+        )
         self.monitors_list = wx.ListBox(
-            self.top_panel, wx.ID_ANY,
-            choices=[],
-            style=wx.LB_SINGLE
+            self.top_panel, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
         self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "+")
         self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "-")
 
-        self.reset_button = wx.Button(self.top_panel, wx.ID_ANY, "↺", size=(32, 28))
+        self.reset_button = wx.Button(
+            self.top_panel, wx.ID_ANY, "↺", size=(32, 28)
+        )
 
         self.console = wx.TextCtrl(
-            self.top_panel, wx.ID_ANY, "",
-            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL
+            self.top_panel,
+            wx.ID_ANY,
+            "",
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL,
         )
         console_font = wx.Font(
-            9, wx.FONTFAMILY_TELETYPE,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+            9,
+            wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
         )
         self.console.SetFont(console_font)
 
         # Tooltips
         initial_cycles = self.spin.GetValue()
-        self.run_button.SetToolTip(f"Run the simulation from scratch for {initial_cycles} cycles")
-        self.continue_button.SetToolTip(f"Continue the simulation for {initial_cycles} additional cycles")
-        self.reset_button.SetToolTip("Reset the simulation to its initial state")
+        self.run_button.SetToolTip(
+            f"Run the simulation from scratch for {initial_cycles} cycles"
+        )
+        self.continue_button.SetToolTip(
+            f"Continue the simulation for {initial_cycles} additional cycles"
+        )
+        self.reset_button.SetToolTip(
+            "Reset the simulation to its initial state"
+        )
         self.switch_on.SetToolTip("Set the selected switch to ON (1)")
         self.switch_off.SetToolTip("Set the selected switch to OFF (0)")
         self.add_monitor_btn.SetToolTip("Add a monitor to the selected signal")
@@ -547,7 +592,9 @@ class Gui(wx.Frame):
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
         self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
-        self.last_cycles_check.Bind(wx.EVT_CHECKBOX, self.on_last_cycles_change)
+        self.last_cycles_check.Bind(
+            wx.EVT_CHECKBOX, self.on_last_cycles_change
+        )
         self.last_cycles_spin.Bind(wx.EVT_SPINCTRL, self.on_last_cycles_change)
         self.last_cycles_spin.Bind(wx.EVT_TEXT, self.on_last_cycles_change)
         self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
@@ -574,14 +621,27 @@ class Gui(wx.Frame):
         view_cycles_sizer.Add(
             self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
         )
-        sim_sizer.Add(view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3)
+        sim_sizer.Add(
+            view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3
+        )
 
         # Buttons laid out side-by-side
         sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sim_btn_sizer.Add(self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_btn_sizer.Add(self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_btn_sizer.Add(self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_sizer.Add(sim_btn_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, 3)
+        sim_btn_sizer.Add(
+            self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_btn_sizer.Add(
+            self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_btn_sizer.Add(
+            self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_sizer.Add(
+            sim_btn_sizer,
+            0,
+            wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM,
+            3,
+        )
 
         # Switches box
         switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
@@ -598,7 +658,9 @@ class Gui(wx.Frame):
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
         monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
-        monitor_sizer.Add(monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3)
+        monitor_sizer.Add(
+            monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
+        )
 
         # Console box
         console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
@@ -653,8 +715,7 @@ class Gui(wx.Frame):
         # Header bar: label + close button
         header_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self._viewer_title = wx.StaticText(
-            self.viewer_panel, label="File Viewer",
-            style=wx.ST_ELLIPSIZE_END
+            self.viewer_panel, label="File Viewer", style=wx.ST_ELLIPSIZE_END
         )
         title_font = self._viewer_title.GetFont()
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
@@ -666,7 +727,9 @@ class Gui(wx.Frame):
         save_btn.SetToolTip("Save changes to file")
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
 
-        implement_btn = wx.Button(self.viewer_panel, label="Implement", size=(80, 28))
+        implement_btn = wx.Button(
+            self.viewer_panel, label="Implement", size=(80, 28)
+        )
         implement_btn.SetToolTip("Run the simulator using this file")
         implement_btn.Bind(wx.EVT_BUTTON, self._on_implement_viewer)
 
@@ -674,7 +737,9 @@ class Gui(wx.Frame):
         close_btn.SetToolTip("Close file viewer")
         close_btn.Bind(wx.EVT_BUTTON, self._on_close_viewer)
 
-        header_sizer.Add(self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6)
+        header_sizer.Add(
+            self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6
+        )
         header_sizer.Add(save_btn, 0, wx.ALL, 2)
         header_sizer.Add(implement_btn, 0, wx.ALL, 2)
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
@@ -682,11 +747,13 @@ class Gui(wx.Frame):
         # Read-only text area with monospace font
         self._file_text = wx.TextCtrl(
             self.viewer_panel,
-            style=wx.TE_MULTILINE | wx.TE_DONTWRAP | wx.HSCROLL
+            style=wx.TE_MULTILINE | wx.TE_DONTWRAP | wx.HSCROLL,
         )
         mono_font = wx.Font(
-            10, wx.FONTFAMILY_TELETYPE,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+            10,
+            wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
         )
         self._file_text.SetFont(mono_font)
         self._file_text.SetBackgroundColour(wx.Colour(20, 24, 32))
@@ -694,7 +761,10 @@ class Gui(wx.Frame):
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
-            wx.StaticLine(self.viewer_panel), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 4
+            wx.StaticLine(self.viewer_panel),
+            0,
+            wx.EXPAND | wx.LEFT | wx.RIGHT,
+            4,
         )
         viewer_sizer.Add(self._file_text, 1, wx.EXPAND | wx.ALL, 4)
         self.viewer_panel.SetSizer(viewer_sizer)
@@ -717,8 +787,9 @@ class Gui(wx.Frame):
         if not self._viewer_visible:
             w = self.GetClientSize().width
             self.outer_splitter.SplitVertically(
-                self.left_pane, self.viewer_panel,
-                w - 380          # viewer starts at 380 px wide
+                self.left_pane,
+                self.viewer_panel,
+                w - 380,  # viewer starts at 380 px wide
             )
             self._viewer_visible = True
             self._viewer_menu_item.Check(True)
@@ -737,7 +808,8 @@ class Gui(wx.Frame):
         if not self._viewer_path:
             wx.MessageBox(
                 "No file is open — nothing to save.",
-                "Save", wx.ICON_WARNING | wx.OK
+                "Save",
+                wx.ICON_WARNING | wx.OK,
             )
             return
         try:
@@ -748,7 +820,8 @@ class Gui(wx.Frame):
         except OSError as exc:
             wx.MessageBox(
                 f"Could not save file:\n{exc}",
-                "Save Error", wx.ICON_ERROR | wx.OK
+                "Save Error",
+                wx.ICON_ERROR | wx.OK,
             )
 
     def _save_viewer_contents(self):
@@ -756,7 +829,8 @@ class Gui(wx.Frame):
         if not self._viewer_path:
             wx.MessageBox(
                 "No file is open - nothing to implement.",
-                "Implement", wx.ICON_WARNING | wx.OK
+                "Implement",
+                wx.ICON_WARNING | wx.OK,
             )
             return False
         try:
@@ -768,7 +842,8 @@ class Gui(wx.Frame):
         except OSError as exc:
             wx.MessageBox(
                 f"Could not save file:\n{exc}",
-                "Save Error", wx.ICON_ERROR | wx.OK
+                "Save Error",
+                wx.ICON_ERROR | wx.OK,
             )
             return False
 
@@ -787,7 +862,8 @@ class Gui(wx.Frame):
         if not parser.parse_network():
             wx.MessageBox(
                 "Could not implement this file because it contains errors.",
-                "Implement Error", wx.ICON_ERROR | wx.OK
+                "Implement Error",
+                wx.ICON_ERROR | wx.OK,
             )
             self.SetStatusText("Implement failed: parse errors in file.")
             self.log("Implement failed: parse errors in " + self._viewer_path)
@@ -834,11 +910,14 @@ class Gui(wx.Frame):
             self._on_save_viewer(event)
 
         elif Id == wx.ID_OPEN:
-            wildcard = "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
+            wildcard = (
+                "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
+            )
             dlg = wx.FileDialog(
-                self, "Open circuit definition file",
+                self,
+                "Open circuit definition file",
                 wildcard=wildcard,
-                style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+                style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
             )
             if dlg.ShowModal() == wx.ID_OK:
                 path = dlg.GetPath()
@@ -877,20 +956,28 @@ class Gui(wx.Frame):
         """Store current monitor traces for the next cycle-windowed run view."""
         self.canvas.previous_signal_traces = {
             monitor: list(signal_list)
-            for monitor, signal_list in self.monitors.monitors_dictionary.items()
+            for monitor, signal_list in self.monitors.monitors_dict.items()
             if signal_list
         }
 
     def update_monitors_list(self):
         """Refresh the monitor list from backend monitor state."""
-        monitored_signals, non_monitored_signals = self.monitors.get_signal_names()
-        display_names = [name.split("__")[1] + " (on)" for name in monitored_signals]
-        display_names.extend([name.split("__")[1] for name in non_monitored_signals])
+        monitored_signals, non_monitored_signals = (
+            self.monitors.get_signal_names()
+        )
+        display_names = [
+            name.split("__")[1] + " (on)" for name in monitored_signals
+        ]
+        display_names.extend(
+            [name.split("__")[1] for name in non_monitored_signals]
+        )
         self.monitors_list.Set(display_names)
         self._monitor_choices = {
             name + " (on)": name for name in monitored_signals
         }
-        self._monitor_choices.update({name: name for name in non_monitored_signals})
+        self._monitor_choices.update(
+            {name: name for name in non_monitored_signals}
+        )
 
     def on_last_cycles_change(self, event):
         """Update the canvas cycle-window view."""
@@ -898,7 +985,9 @@ class Gui(wx.Frame):
             visible_cycles = self.last_cycles_spin.GetValue()
             self.last_cycles_spin.Enable(True)
             self.canvas.visible_cycles = visible_cycles
-            self.SetStatusText("Showing last " + str(visible_cycles) + " cycles.")
+            self.SetStatusText(
+                "Showing last " + str(visible_cycles) + " cycles."
+            )
         else:
             self.last_cycles_spin.Enable(False)
             self.canvas.visible_cycles = None
@@ -908,14 +997,18 @@ class Gui(wx.Frame):
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
         spin_value = self.spin.GetValue()
-        
+
         # Update button label
         self.continue_button.SetLabel(f"+{spin_value}")
-        
+
         # Update tooltips dynamically
-        self.run_button.SetToolTip(f"Run the simulation from scratch for {spin_value} cycles")
-        self.continue_button.SetToolTip(f"Continue the simulation for {spin_value} additional cycles")
-        
+        self.run_button.SetToolTip(
+            f"Run the simulation from scratch for {spin_value} cycles"
+        )
+        self.continue_button.SetToolTip(
+            f"Continue the simulation for {spin_value} additional cycles"
+        )
+
         text = "".join(["New spin control value: ", str(spin_value)])
         self.canvas.render(text)
         self.log(text)
@@ -947,8 +1040,12 @@ class Gui(wx.Frame):
         self.log("Continue clicked: " + str(cycles) + " cycles requested.")
         if self.run_network(cycles):
             self.cycles_completed += cycles
-            self.SetStatusText("Completed " + str(self.cycles_completed) + " cycles.")
-            self.log("Completed " + str(self.cycles_completed) + " total cycles.")
+            self.SetStatusText(
+                "Completed " + str(self.cycles_completed) + " cycles."
+            )
+            self.log(
+                "Completed " + str(self.cycles_completed) + " total cycles."
+            )
         self.update_monitors_list()
         self.canvas.render()
 
@@ -1050,33 +1147,33 @@ class Gui(wx.Frame):
 
     def on_h_scroll(self, event):
         """Handle horizontal scrollbar scrolling."""
-        zoom = getattr(self.canvas, 'zoom', 1.0)
+        zoom = getattr(self.canvas, "zoom", 1.0)
         range_max = 10000
         thumb_size = int(range_max / zoom)
         scrollable_x = range_max - thumb_size
-        
+
         if scrollable_x > 0:
             pos = self.h_scroll.GetThumbPosition()
             self.canvas.pan_x_pct = pos / scrollable_x
         else:
             self.canvas.pan_x_pct = 0.0
-            
+
         self.canvas.init = False
         self.canvas.Refresh()
 
     def on_v_scroll(self, event):
         """Handle vertical scrollbar scrolling."""
-        zoom = getattr(self.canvas, 'zoom', 1.0)
+        zoom = getattr(self.canvas, "zoom", 1.0)
         range_max = 10000
         thumb_size = int(range_max / zoom)
         scrollable_y = range_max - thumb_size
-        
+
         if scrollable_y > 0:
             pos = self.v_scroll.GetThumbPosition()
             self.canvas.pan_y_pct = pos / scrollable_y
         else:
             self.canvas.pan_y_pct = 0.0
-            
+
         self.canvas.init = False
         self.canvas.Refresh()
 
@@ -1098,24 +1195,27 @@ class Gui(wx.Frame):
 
     def update_scrollbars(self):
         """Update scrollbar ranges, thumb sizes, and positions based on canvas state."""
-        zoom = getattr(self.canvas, 'zoom', 1.0)
-        pan_x_pct = getattr(self.canvas, 'pan_x_pct', 0.0)
-        pan_y_pct = getattr(self.canvas, 'pan_y_pct', 0.0)
+        zoom = getattr(self.canvas, "zoom", 1.0)
+        pan_x_pct = getattr(self.canvas, "pan_x_pct", 0.0)
+        pan_y_pct = getattr(self.canvas, "pan_y_pct", 0.0)
 
         range_max = 10000
         thumb_size = int(range_max / zoom)
-        
+
         scrollable_x = range_max - thumb_size
         scrollable_y = range_max - thumb_size
-        
+
         pos_x = int(pan_x_pct * scrollable_x) if scrollable_x > 0 else 0
         pos_y = int(pan_y_pct * scrollable_y) if scrollable_y > 0 else 0
-        
+
         page_size = thumb_size
 
-        self.h_scroll.SetScrollbar(pos_x, thumb_size, range_max, page_size, refresh=True)
-        self.v_scroll.SetScrollbar(pos_y, thumb_size, range_max, page_size, refresh=True)
-        
+        self.h_scroll.SetScrollbar(
+            pos_x, thumb_size, range_max, page_size, refresh=True
+        )
+        self.v_scroll.SetScrollbar(
+            pos_y, thumb_size, range_max, page_size, refresh=True
+        )
 
     def on_reset_view(self, event):
         """Reset all view parameters back to defaults and refresh canvas."""
@@ -1150,16 +1250,15 @@ class Gui(wx.Frame):
             "4. View Options:\n"
             "   - Toggle the live text definition panel under View -> Show File Viewer."
         )
-    
+
         # Create and display the modal information dialogue box
-        dlg = wx.MessageDialog(self, help_text, "GUI Usage Guide", wx.OK | wx.ICON_INFORMATION)
+        dlg = wx.MessageDialog(
+            self, help_text, "GUI Usage Guide", wx.OK | wx.ICON_INFORMATION
+        )
         dlg.ShowModal()
         dlg.Destroy()
-    
+
     def _get_switch_names(self):
         """Return a list of switch device name strings from the backend."""
         switch_ids = self.devices.find_devices(self.devices.SWITCH)
         return [self.names.get_name_string(sid) for sid in switch_ids]
-
-    
-    

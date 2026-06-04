@@ -2,8 +2,8 @@
 
 import pytest
 
-from names import Names
 from devices import Devices
+from names import Names
 from network import Network
 
 
@@ -38,7 +38,9 @@ def test_get_connected_output(network_with_devices):
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Or1", "I1", "I2"])
+    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Or1", "I1", "I2"]
+    )
     # Inputs are unconnected, get_connected_output should return None
     assert network.get_connected_output(OR1_ID, I1) is None
     assert network.get_connected_output(OR1_ID, I2) is None
@@ -60,7 +62,9 @@ def test_get_input_signal(network_with_devices):
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Or1", "I1", "I2"])
+    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Or1", "I1", "I2"]
+    )
     # Inputs are unconnected, get_input_signal should return None
     assert network.get_input_signal(OR1_ID, I1) is None
     assert network.get_input_signal(OR1_ID, I2) is None
@@ -100,7 +104,9 @@ def test_check_network(network_with_devices):
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Or1", "I1", "I2"])
+    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Or1", "I1", "I2"]
+    )
 
     # Inputs are unconnected, check_network() should return False
     assert not network.check_network()
@@ -119,7 +125,9 @@ def test_make_connection(network_with_devices):
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Or1", "I1", "I2"])
+    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Or1", "I1", "I2"]
+    )
 
     or1 = devices.get_device(OR1_ID)
 
@@ -151,13 +159,17 @@ def test_make_connection(network_with_devices):
         ("(SW1_ID, None, OR1_ID, I1)", "network.INPUT_CONNECTED"),
     ],
 )
-def test_make_connection_gives_error(network_with_devices, function_args, error):
+def test_make_connection_gives_error(
+    network_with_devices, function_args, error
+):
     """Test if the make_connection function returns the correct errors."""
     network = network_with_devices
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Or1", "I1", "I2"])
+    [SW1_ID, SW2_ID, OR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Or1", "I1", "I2"]
+    )
 
     # Connect Or1.I1 to Sw1
     network.make_connection(SW1_ID, None, OR1_ID, I1)
@@ -174,7 +186,9 @@ def test_execute_xor(new_network):
     devices = network.devices
     names = devices.names
 
-    [SW1_ID, SW2_ID, XOR1_ID, I1, I2] = names.lookup(["Sw1", "Sw2", "Xor1", "I1", "I2"])
+    [SW1_ID, SW2_ID, XOR1_ID, I1, I2] = names.lookup(
+        ["Sw1", "Sw2", "Xor1", "I1", "I2"]
+    )
 
     # Make devices
     devices.make_device(XOR1_ID, devices.XOR)
@@ -213,17 +227,26 @@ def test_execute_xor(new_network):
     ],
 )
 def test_execute_non_xor_gates(
-        new_network, gate_id, switch_outputs, gate_output, gate_kind
+    new_network, gate_id, switch_outputs, gate_output, gate_kind
 ):
     """Test if execute_network returns the correct output for non-XOR gates."""
     network = new_network
     devices = network.devices
     names = devices.names
 
-    [AND1_ID, OR1_ID, NAND1_ID, NOR1_ID, SW1_ID, SW2_ID, SW3_ID, I1, I2, I3] = (
-        names.lookup(
-            ["And1", "Or1", "Nand1", "Nor1", "Sw1", "Sw2", "Sw3", "I1", "I2", "I3"]
-        )
+    [
+        AND1_ID,
+        OR1_ID,
+        NAND1_ID,
+        NOR1_ID,
+        SW1_ID,
+        SW2_ID,
+        SW3_ID,
+        I1,
+        I2,
+        I3,
+    ] = names.lookup(
+        ["And1", "Or1", "Nand1", "Nor1", "Sw1", "Sw2", "Sw3", "I1", "I2", "I3"]
     )
 
     LOW = devices.LOW
@@ -297,11 +320,11 @@ def test_execute_non_gates(new_network):
 
     # The clock is not rising yet, Q could be (randomly) HIGH or LOW
     assert [
-               eval(sw1_output),
-               eval(sw2_output),
-               eval(sw3_output),
-               eval(clock_output),
-           ] == [HIGH, LOW, LOW, LOW]
+        eval(sw1_output),
+        eval(sw2_output),
+        eval(sw3_output),
+        eval(clock_output),
+    ] == [HIGH, LOW, LOW, LOW]
 
     assert eval(dtype_Q) in [HIGH, LOW]
     assert eval(dtype_QBAR) == network.invert_signal(eval(dtype_Q))
@@ -309,13 +332,13 @@ def test_execute_non_gates(new_network):
     network.execute_network()  # the clock has risen
     # While sw1(DATA) is high, Q has now changed to HIGH
     assert [
-               eval(sw1_output),
-               eval(sw2_output),
-               eval(sw3_output),
-               eval(clock_output),
-               eval(dtype_Q),
-               eval(dtype_QBAR),
-           ] == [HIGH, LOW, LOW, HIGH, HIGH, LOW]
+        eval(sw1_output),
+        eval(sw2_output),
+        eval(sw3_output),
+        eval(clock_output),
+        eval(dtype_Q),
+        eval(dtype_QBAR),
+    ] == [HIGH, LOW, LOW, HIGH, HIGH, LOW]
 
     devices.set_switch(SW1_ID, LOW)  # Sw1 is connected to DATA
     devices.set_switch(SW2_ID, HIGH)  # Sw2 is connected to SET
@@ -324,13 +347,13 @@ def test_execute_non_gates(new_network):
     # Even if sw1(DATA) is LOW, and the clock is rising,
     # sw2(SET) is HIGH, so Q is HIGH
     assert [
-               eval(sw1_output),
-               eval(sw2_output),
-               eval(sw3_output),
-               eval(clock_output),
-               eval(dtype_Q),
-               eval(dtype_QBAR),
-           ] == [LOW, HIGH, LOW, HIGH, HIGH, LOW]
+        eval(sw1_output),
+        eval(sw2_output),
+        eval(sw3_output),
+        eval(clock_output),
+        eval(dtype_Q),
+        eval(dtype_QBAR),
+    ] == [LOW, HIGH, LOW, HIGH, HIGH, LOW]
 
     devices.set_switch(SW1_ID, HIGH)  # Sw1 is connected to DATA
     devices.set_switch(SW2_ID, LOW)  # Sw2 is connected to SET
@@ -340,13 +363,13 @@ def test_execute_non_gates(new_network):
     # Even if sw1(DATA) is HIGH, and the clock is rising,
     # sw3(CLEAR) is HIGH, so Q is LOW
     assert [
-               eval(sw1_output),
-               eval(sw2_output),
-               eval(sw3_output),
-               eval(clock_output),
-               eval(dtype_Q),
-               eval(dtype_QBAR),
-           ] == [HIGH, LOW, HIGH, HIGH, LOW, HIGH]
+        eval(sw1_output),
+        eval(sw2_output),
+        eval(sw3_output),
+        eval(clock_output),
+        eval(dtype_Q),
+        eval(dtype_QBAR),
+    ] == [HIGH, LOW, HIGH, HIGH, LOW, HIGH]
 
 
 def test_oscillating_network(new_network):

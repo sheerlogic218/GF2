@@ -16,14 +16,14 @@ import sys
 
 import wx
 
-from names import Names
 from devices import Devices
-from network import Network
-from monitors import Monitors
-from scanner import Scanner
-from parse import Parser
-from userint import UserInterface
 from gui import Gui
+from monitors import Monitors
+from names import Names
+from network import Network
+from parse import Parser
+from scanner import Scanner
+from userint import UserInterface
 
 
 def main(arg_list):
@@ -77,12 +77,15 @@ def main(arg_list):
 
             for device in parser.devices.devices_list:
                 print(parser.names.inv_name_IDS[device.device_kind])
+            print(parser.names.inv_name_IDS)
 
             print(parser.module_mappings)
 
             # Initialise an instance of the gui.Gui() class
             app = wx.App()
-            gui = Gui("Logic Simulator", path, names, devices, network, monitors)
+            gui = Gui(
+                "Logic Simulator", path, names, devices, network, monitors
+            )
             gui.Show(True)
             app.MainLoop()
 

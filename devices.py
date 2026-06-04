@@ -10,8 +10,8 @@ Devices - makes and stores all the devices in the logic network.
 """
 
 import random
-from typing import Literal
 from uuid import UUID
+
 from names import Names
 
 
@@ -128,11 +128,15 @@ class Devices:
             self.FALLING,
             self.BLANK,
         ] = range(5)
-        self.gate_types = [self.AND, self.OR, self.NAND, self.NOR, self.XOR] = (
-            self.names.lookup(gate_strings)
-        )
-        self.device_types = [self.CLOCK, self.SWITCH, self.D_TYPE] = self.names.lookup(
-            device_strings
+        self.gate_types = [
+            self.AND,
+            self.OR,
+            self.NAND,
+            self.NOR,
+            self.XOR,
+        ] = self.names.lookup(gate_strings)
+        self.device_types = [self.CLOCK, self.SWITCH, self.D_TYPE] = (
+            self.names.lookup(device_strings)
         )
         self.dtype_input_ids = [
             self.CLK_ID,
@@ -296,9 +300,13 @@ class Devices:
 
             elif device.device_kind == self.CLOCK:
                 clock_signal = random.choice([self.LOW, self.HIGH])
-                self.add_output(device.device_id, output_id=None, signal=clock_signal)
+                self.add_output(
+                    device.device_id, output_id=None, signal=clock_signal
+                )
                 # Initialise it to a random point in its cycle.
-                device.clock_counter = random.randrange(device.clock_half_period)
+                device.clock_counter = random.randrange(
+                    device.clock_half_period
+                )
 
     def make_device(self, device_id, device_kind, device_property=None):
         """Create the specified device.

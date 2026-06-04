@@ -21,12 +21,16 @@ def separate_brackets(val):
     re_exp = re.compile(r"(\([a-zA-Z0-9+*^!\- ]*\))")
 
     if (l_brackets := val.count("(")) != (r_brackets := val.count(")")):
-        raise SyntaxError(f"Invalid expression line, brackets do not match: {val}")
+        raise SyntaxError(
+            f"Invalid expression line, brackets do not match: {val}"
+        )
 
     parts = re.split(re_exp, val)
 
     if len(parts) < l_brackets + 1:
-        raise SyntaxError(f"Invalid expression line, brackets do not match: {val}")
+        raise SyntaxError(
+            f"Invalid expression line, brackets do not match: {val}"
+        )
 
     parts_to_eval = {}
     depth = 0
@@ -41,7 +45,7 @@ def separate_brackets(val):
                 if len(part[1:-1]) == 0:
                     pos = re.search(r"\(\)", val).span()
                     raise SyntaxError(
-                        f"Invalid expression line, empty parenthesis: {val}\n {" "*(56+pos[0])+"^"*(pos[1]-pos[0])}"
+                        f"Invalid expression line, empty parenthesis: {val}\n {" " * (56 + pos[0]) + "^" * (pos[1] - pos[0])}"
                     )
 
                 # captures single variables in brackets
@@ -49,7 +53,7 @@ def separate_brackets(val):
                     if part[1] in "+*^!":
                         pos = re.search(r"\([+*^!]\)", val).span()
                         raise SyntaxError(
-                            f"Invalid expression line, parenthesis around operator: {val}\n {" "*(66+pos[0])+"^"*(pos[1]-pos[0])}"
+                            f"Invalid expression line, parenthesis around operator: {val}\n {" " * (66 + pos[0]) + "^" * (pos[1] - pos[0])}"
                         )
                     parts[i] = part[1:-1]
                     continue

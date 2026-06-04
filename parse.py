@@ -11,9 +11,7 @@ Parser - parses the definition file and builds the logic network.
 
 import uuid
 
-from devices import Devices
-from names import Names
-from scanner import Scanner, Symbol
+from scanner import Symbol
 
 
 class Parser:
@@ -127,7 +125,9 @@ class Parser:
 
         self.expect(Symbol.PUNCTUATION, ";")
 
-        while not (self.symbol.type == Symbol.KEYWORD and self.symbol.text == "end"):
+        while not (
+            self.symbol.type == Symbol.KEYWORD and self.symbol.text == "end"
+        ):
             if self.symbol.type == Symbol.EOF:
                 print("Syntax Error: unexpected End of File (EOF)")
                 self.error_count += 1
@@ -186,7 +186,9 @@ class Parser:
     def parse_declaration(self):
         if self.accept(Symbol.KEYWORD, "wire"):
             if self.symbol.type == Symbol.NAME:
-                wire_name = f"__{self.symbol.text}__{self.current_module_name}__"
+                wire_name = (
+                    f"__{self.symbol.text}__{self.current_module_name}__"
+                )
                 [wire_id] = self.names.lookup([wire_name])
                 self.next_symbol()
 
@@ -201,8 +203,11 @@ class Parser:
             self.expect(Symbol.PUNCTUATION, ";")
 
         elif self.accept(Symbol.KEYWORD, "clock"):
+            # DO THIS, ADD DEVICE
             if self.symbol.type == Symbol.NAME:
-                clock_name = f"__{self.symbol.text}__{self.current_module_name}__"
+                clock_name = (
+                    f"__{self.symbol.text}__{self.current_module_name}__"
+                )
                 [clock_id] = self.names.lookup([clock_name])
                 self.next_symbol()
             else:
@@ -226,7 +231,9 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "switch"):
             if self.symbol.type == Symbol.NAME:
-                switch_name = f"__{self.symbol.text}__{self.current_module_name}__"
+                switch_name = (
+                    f"__{self.symbol.text}__{self.current_module_name}__"
+                )
                 [switch_id] = self.names.lookup([switch_name])
                 self.next_symbol()
             else:
@@ -235,7 +242,10 @@ class Parser:
 
             self.expect(Symbol.PUNCTUATION, "=")
 
-            if self.symbol.type == Symbol.NUMBER and self.symbol.text in ["0", "1"]:
+            if self.symbol.type == Symbol.NUMBER and self.symbol.text in [
+                "0",
+                "1",
+            ]:
                 # Valid, add device
                 state = int(self.symbol.text)
                 self.devices.make_device(switch_id, self.devices.SWITCH, state)
@@ -248,7 +258,9 @@ class Parser:
 
         elif self.accept(Symbol.KEYWORD, "dtype"):
             if self.symbol.type == Symbol.NAME:
-                dtype_name = f"__{self.symbol.text}__{self.current_module_name}__"
+                dtype_name = (
+                    f"__{self.symbol.text}__{self.current_module_name}__"
+                )
                 [dtype_id] = self.names.lookup([dtype_name])
                 self.next_symbol()
             else:
@@ -266,7 +278,9 @@ class Parser:
             self.accept(Symbol.PUNCTUATION, "=")
             or self.accept(Symbol.PUNCTUATION, "<=")
         ):
-            print(f"Syntax Error: Expected '=' or '<=', got {self.symbol.text}")
+            print(
+                f"Syntax Error: Expected '=' or '<=', got {self.symbol.text}"
+            )
             self.error_count += 1
 
         source_device_id, source_port_id = self.parse_rhs()
@@ -326,7 +340,9 @@ class Parser:
 
         for i, (src_dev, src_port) in enumerate(inputs, start=1):
             [input_port_id] = self.names.lookup([f"I{i}"])
-            self.network.make_connection(src_dev, src_port, gate_id, input_port_id)
+            self.network.make_connection(
+                src_dev, src_port, gate_id, input_port_id
+            )
 
         return (gate_id, None)
 
@@ -352,14 +368,18 @@ class Parser:
 
         # If there's a NOT operator (!), instantiate a 1-input NAND gate as an inverter
         if invert:
-            gate_name = f"__NOT__{self.current_module_name}__{uuid.uuid4().hex}"
+            gate_name = (
+                f"__NOT__{self.current_module_name}__{uuid.uuid4().hex}"
+            )
             [gate_id] = self.names.lookup([gate_name])
 
             # A 1-input NAND functions as a NOT gate in this architecture
             self.devices.make_device(gate_id, self.devices.NAND, 1)
             [input_port_id] = self.names.lookup(["I1"])
 
-            self.network.make_connection(signal[0], signal[1], gate_id, input_port_id)
+            self.network.make_connection(
+                signal[0], signal[1], gate_id, input_port_id
+            )
             return (gate_id, None)
 
         return signal
@@ -375,12 +395,17 @@ class Parser:
         # Check if a specific port is referenced (e.g., DTYPE.Q)
         if self.accept(Symbol.PUNCTUATION, "."):
             valid_ports = ["CLK", "DATA", "SET", "CLEAR", "Q", "QBAR"]
-            if self.symbol.type == Symbol.NAME and self.symbol.text in valid_ports:
+            if (
+                self.symbol.type == Symbol.NAME
+                and self.symbol.text in valid_ports
+            ):
                 port_name = self.symbol.text
                 [port_id] = self.names.lookup([port_name])
                 self.next_symbol()
             else:
-                print(f"Syntax Error: Expected valid port_name, got {self.symbol.text}")
+                print(
+                    f"Syntax Error: Expected valid port_name, got {self.symbol.text}"
+                )
                 self.error_count += 1
 
         # EG thing[3], handle that logic here.
@@ -399,7 +424,9 @@ class Parser:
             error = self.monitors.make_monitor(device_id, port_id)
 
             if error != self.monitors.NO_ERROR:
-                print(f"Semantic Error: Failed to add monitor. Error code: {error}")
+                print(
+                    f"Semantic Error: Failed to add monitor. Error code: {error}"
+                )
                 self.error_count += 1
 
     def parse_instance(self):

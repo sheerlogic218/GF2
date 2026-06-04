@@ -10,7 +10,6 @@ Symbol - encapsulates a symbol and stores its properties.
 """
 
 from names import Names
-import re
 
 
 class Symbol:
@@ -82,6 +81,13 @@ class Scanner:
             "end",
             "instance",
         ]
+        self.operators = {
+            "AND": "*",
+            "OR": "+",
+            "XOR": "^",
+        }
+        # NAND, NOR ARE FUCKED
+        # TODO
         self.names.lookup(self.keywords)
 
     def advance(self) -> None:
@@ -120,10 +126,12 @@ class Scanner:
             self.advance()
 
     def skip_whitespace_and_comments(self) -> None:
-        while self.get_current_char() + self.get_next_char() == "//" or self.get_current_char().isspace():
+        while (
+            self.get_current_char() + self.get_next_char() == "//"
+            or self.get_current_char().isspace()
+        ):
             self.skip_whitespace()
             self.skip_comments()
-
 
     def get_symbol(self):
         """Translate the next sequence of characters into a symbol."""
@@ -138,6 +146,12 @@ class Scanner:
         # End of file
         if char == "":
             symbol.type = Symbol.EOF
+            return symbol
+
+        if char in "=+*^!,.;:[]() ":
+            symbol.type = Symbol.PUNCTUATION
+            symbol.text = char
+            self.advance()
             return symbol
 
         # Words/Keywords
@@ -175,12 +189,6 @@ class Scanner:
             symbol.text = text
             [symbol.id] = self.names.lookup([text])
             self.advance()
-            self.advance()
-            return symbol
-
-        if char in "=+*^!,.;:[]() ":
-            symbol.type = Symbol.PUNCTUATION
-            symbol.text = char
             self.advance()
             return symbol
 

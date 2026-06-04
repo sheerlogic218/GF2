@@ -1,0 +1,19 @@
+[tool.black]
+# Overrides Black's default 88 character limit to match strict PEP 8 rules
+line-length = 79
+
+# Target specific Python runtime versions
+target-version = ['py310', 'py311', 'py312', 'py313']
+
+# Pattern to include Python source files
+include = '\.pyi?$'
+
+# Directories or files that Black should skip formatting entirely
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
