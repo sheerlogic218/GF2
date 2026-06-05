@@ -9,7 +9,6 @@ end;
 module client_requests : -> ;
 	clock client_clk[2];
 	dtype client_dtype;
-	client_dtype.CLK <= client_clk;
 
 	switch sw1 = 0;
 	switch sw2 = 0;
