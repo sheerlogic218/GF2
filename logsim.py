@@ -76,9 +76,9 @@ def main(arg_list):
         try:
             if parser.parse_network():
 
-                for device in parser.devices.devices_dict.values():
-                    print(parser.names.inv_name_IDS[device.device_kind])
-                print(parser.names.inv_name_IDS)
+                # for device in parser.devices.devices_dict.values():
+                #     print(parser.names.inv_name_IDS[device.device_kind])
+                # print(parser.names.inv_name_IDS)
 
                 # Initialise an instance of the gui.Gui() class
                 app = wx.App()
