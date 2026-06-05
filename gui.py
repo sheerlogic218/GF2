@@ -10,6 +10,7 @@ Gui - configures the main window and all the widgets.
 """
 
 import datetime
+import math
 
 import wx
 import wx.glcanvas as wxcanvas
@@ -159,6 +160,19 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glVertex2f(x, box_y_top)
             GL.glEnd()
             GL.glDisable(GL.GL_LINE_STIPPLE)
+
+            # X-axis cycle number labels in the bottom margin
+            label_y = canvas_height - 8
+            raw_step = math.ceil(28 / cycle_width) if cycle_width > 0 else 1
+            label_step = next(
+                (n for n in [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000]
+                 if n >= raw_step),
+                raw_step,
+            )
+            for i in range(label_step, num_cycles + 1, label_step):
+                x = box_x_start + i * cycle_width
+                label = str(i)
+                self.render_text(label, x - len(label) * 3.5, label_y)
         else:
             # Safely exit if no simulation cycles have run yet
             GL.glFlush()
@@ -788,21 +802,21 @@ class Gui(wx.Frame):
 
         self.aui_manager.AddPane(sim_pane,
                                  _resizable_pane(0, "Simulation").Name("Simulation").
-                                 MinSize((120, 155)).BestSize((230, 195)))
+                                 MinSize((120, 155)).BestSize((200, 195)))
 
         self.aui_manager.AddPane(switch_pane,
                                  _resizable_pane(1, "Switches").Name("Switches").
-                                 MinSize((120, 155)).BestSize((230, 195)))
+                                 MinSize((120, 155)).BestSize((200, 195)))
 
         self.aui_manager.AddPane(monitor_pane,
                                  _resizable_pane(2, "Monitors").Name("Monitors").
-                                 MinSize((120, 155)).BestSize((230, 195)))
+                                 MinSize((120, 155)).BestSize((200, 195)))
 
         # Console gets a wider BestSize because wx.TextCtrl has no natural
         # fixed width of its own.
         self.aui_manager.AddPane(console_pane,
                                  _resizable_pane(3, "Console").Name("Console").
-                                 MinSize((200, 155)).BestSize((380, 195)))
+                                 MinSize((200, 155)).BestSize((450, 195)))
         
         self.aui_manager.Update()
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
