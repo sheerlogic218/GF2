@@ -15,6 +15,7 @@ import math
 import wx
 import wx.glcanvas as wxcanvas
 import wx.lib.agw.aui as agw_aui
+import wx.stc
 from OpenGL import GL, GLUT
 
 from devices import Devices
@@ -913,20 +914,25 @@ class Gui(wx.Frame):
         header_sizer.Add(implement_btn, 0, wx.ALL, 2)
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
 
-        # Read-only text area with monospace font
-        self._file_text = wx.TextCtrl(
-            self.viewer_panel,
-            style=wx.TE_MULTILINE | wx.TE_DONTWRAP | wx.HSCROLL,
-        )
+        # Scintilla editor with line numbers
+        self._file_text = wx.stc.StyledTextCtrl(self.viewer_panel, style=wx.BORDER_NONE)
+        self._file_text.SetLexer(wx.stc.STC_LEX_NULL)
         mono_font = wx.Font(
-            10,
-            wx.FONTFAMILY_TELETYPE,
-            wx.FONTSTYLE_NORMAL,
-            wx.FONTWEIGHT_NORMAL,
+            10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
         )
-        self._file_text.SetFont(mono_font)
-        self._file_text.SetBackgroundColour(wx.Colour(20, 24, 32))
-        self._file_text.SetForegroundColour(wx.Colour(210, 220, 235))
+        self._file_text.StyleSetFont(wx.stc.STC_STYLE_DEFAULT, mono_font)
+        self._file_text.StyleSetBackground(wx.stc.STC_STYLE_DEFAULT, wx.Colour(20, 24, 32))
+        self._file_text.StyleSetForeground(wx.stc.STC_STYLE_DEFAULT, wx.Colour(210, 220, 235))
+        self._file_text.StyleClearAll()
+        self._file_text.SetCaretForeground(wx.Colour(210, 220, 235))
+
+        # Line number margin
+        self._file_text.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        self._file_text.SetMarginWidth(0, 48)
+        self._file_text.StyleSetBackground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(30, 35, 45))
+        self._file_text.StyleSetForeground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(100, 120, 150))
+        self._file_text.SetMarginWidth(1, 0)
+        self._file_text.SetMarginWidth(2, 0)
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
@@ -943,12 +949,12 @@ class Gui(wx.Frame):
         try:
             with open(path, "r") as fh:
                 content = fh.read()
-            self._file_text.SetValue(content)
+            self._file_text.SetText(content)
             filename = path.split("/")[-1].split("\\")[-1]
             self._viewer_title.SetLabel(_("File Viewer") + f" — {filename}")
             self._viewer_title.SetToolTip(path)
         except OSError as exc:
-            self._file_text.SetValue(_("Could not open file:\n%s") % exc)
+            self._file_text.SetText(_("Could not open file:\n%s") % exc)
             self._viewer_title.SetLabel(_("File Viewer — error"))
 
     def _show_viewer(self):
@@ -983,7 +989,7 @@ class Gui(wx.Frame):
             return
         try:
             with open(self._viewer_path, "w") as fh:
-                fh.write(self._file_text.GetValue())
+                fh.write(self._file_text.GetText())
             self.SetStatusText(_("Saved: %s") % self._viewer_path)
             self.log(_("File saved: %s") % self._viewer_path)
         except OSError as exc:
@@ -1004,7 +1010,7 @@ class Gui(wx.Frame):
             return False
         try:
             with open(self._viewer_path, "w") as fh:
-                fh.write(self._file_text.GetValue())
+                fh.write(self._file_text.GetText())
             self.SetStatusText(_("Saved: %s") % self._viewer_path)
             self.log(_("File saved: %s") % self._viewer_path)
             return True
