@@ -474,10 +474,15 @@ class Gui(wx.Frame):
         self.outer_splitter = wx.SplitterWindow(
             self, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
         )
+        self.outer_splitter.SetSashGravity(0.0)  # allocate more space to left pane
+
         self.outer_splitter.SetMinimumPaneSize(200)
 
         # Left pane wraps the existing horizontal (controls / canvas) layout
         self.left_pane = wx.Panel(self.outer_splitter)
+
+        #ensure minimum size of left pane to prevent splitter collapse when viewer is shown
+        self.left_pane.SetMinSize((650, -1))
 
         # Right pane: file viewer – built before the splitter is configured
         self._build_file_viewer(self.outer_splitter)
@@ -605,7 +610,7 @@ class Gui(wx.Frame):
         # ── Control-panel sizer ──────────────────────────────────────────────
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.top_panel.SetSizer(top_sizer)
-        top_sizer.SetMinSize((-1, 150))
+        top_sizer.SetMinSize((-1, 170))
 
         # Simulation box
         sim_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Simulation")
@@ -646,6 +651,8 @@ class Gui(wx.Frame):
         switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
         switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
+
+        self.switch_choice.SetMinSize((90, -1))
         switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
 
         # Monitors box
@@ -665,12 +672,17 @@ class Gui(wx.Frame):
         console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
         console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
+        console_sizer.SetMinSize((350,100))
 
         # Switch ON/OFF buttons side-by-side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.switch_on.SetMinSize((50, -1))
+        self.switch_off.SetMinSize((50, -1))
         switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
+        switch_sizer.SetMinSize((100, -1))
+
 
         top_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 2)
         top_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 2)
@@ -678,8 +690,8 @@ class Gui(wx.Frame):
         top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
-        self.splitter.SetMinimumPaneSize(145)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
+        self.splitter.SetMinimumPaneSize(165)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
         left_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -689,7 +701,7 @@ class Gui(wx.Frame):
         # ── Frame sizer wraps the outer splitter ─────────────────────────────
         main_sizer = wx.BoxSizer(wx.VERTICAL)
         main_sizer.Add(self.outer_splitter, 1, wx.EXPAND)
-        self.SetSizeHints(700, 400)
+        self.SetSizeHints(850, 425)
         self.SetSizer(main_sizer)
 
         self.CreateStatusBar()
