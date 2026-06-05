@@ -11,6 +11,7 @@ Gui - configures the main window and all the widgets.
 
 import datetime
 import math
+import re
 
 import wx
 import wx.glcanvas as wxcanvas
@@ -931,8 +932,21 @@ class Gui(wx.Frame):
         self._file_text.SetMarginWidth(0, 48)
         self._file_text.StyleSetBackground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(30, 35, 45))
         self._file_text.StyleSetForeground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(100, 120, 150))
-        self._file_text.SetMarginWidth(1, 0)
+        # Margin 1: error indicator dots (14 px)
+        self._file_text.SetMarginType(1, wx.stc.STC_MARGIN_SYMBOL)
+        self._file_text.SetMarginWidth(1, 14)
+        self._file_text.SetMarginSensitive(1, False)
+        self._file_text.SetMarginMask(1, 0b11)  # show markers 0 and 1
         self._file_text.SetMarginWidth(2, 0)
+
+        # Marker 0: red circle in error margin
+        self._file_text.MarkerDefine(
+            0, wx.stc.STC_MARK_CIRCLE, wx.Colour(220, 60, 60), wx.Colour(200, 40, 40)
+        )
+        # Marker 1: full-line red background
+        self._file_text.MarkerDefine(
+            1, wx.stc.STC_MARK_BACKGROUND, wx.Colour(80, 20, 20), wx.Colour(70, 18, 18)
+        )
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
@@ -950,6 +964,8 @@ class Gui(wx.Frame):
             with open(path, "r") as fh:
                 content = fh.read()
             self._file_text.SetText(content)
+            self._file_text.MarkerDeleteAll(0)
+            self._file_text.MarkerDeleteAll(1)
             filename = path.split("/")[-1].split("\\")[-1]
             self._viewer_title.SetLabel(_("File Viewer") + f" — {filename}")
             self._viewer_title.SetToolTip(path)
@@ -1022,6 +1038,22 @@ class Gui(wx.Frame):
             )
             return False
 
+    def _highlight_errors(self, errors):
+        """Add a red circle and line background for each error line in the viewer."""
+        self._file_text.MarkerDeleteAll(0)
+        self._file_text.MarkerDeleteAll(1)
+        first_line = None
+        for err in errors:
+            m = re.search(r'at\s+(?:line\s+)?(\d+)', err)
+            if m:
+                ln = int(m.group(1)) - 1  # STC lines are 0-indexed
+                self._file_text.MarkerAdd(ln, 0)
+                self._file_text.MarkerAdd(ln, 1)
+                if first_line is None:
+                    first_line = ln
+        if first_line is not None:
+            self._file_text.GotoLine(first_line)
+
     def _on_implement_viewer(self, event):
         """Use the file currently shown in the viewer as the active circuit."""
         if not self._save_viewer_contents():
@@ -1043,8 +1075,8 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Implement failed: parse errors in file."))
             self.log(_("Implement failed: parse errors in %s") % self._viewer_path)
             for e in parser.errors:
-                # TODO: add coordinates to text box.
                 self.log(e)
+            self._highlight_errors(parser.errors)
             return
 
         self.names = names
@@ -1056,6 +1088,8 @@ class Gui(wx.Frame):
         self.canvas.monitors = monitors
         self.canvas.previous_signal_traces = {}
 
+        self._file_text.MarkerDeleteAll(0)
+        self._file_text.MarkerDeleteAll(1)
         self.update_switch_list()
         self.update_monitors_list()
         self.update_scrollbars()

@@ -3,7 +3,7 @@ module a4inputnand : input1, input2, input3, input4 -> output;
 end;
 
 module xor : input1, input2 -> output;
-	output = input1^input2;
+	output = input1^input2;...
 end;
 
 module client_requests : -> ;
