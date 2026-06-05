@@ -1,8 +1,8 @@
-module a4inputnand_bob : input1, input2, input3, input4 -> output;
+module a4inputnand : input1, input2, input3, input4 -> output;
 	output = !(input1*input2*input3*input4);
 end;
 
-module xor_bill : input1, input2 -> output;
+module xor : input1, input2 -> output;
 	output = input1^input2;
 end;
 
@@ -16,17 +16,17 @@ module client_requests : -> ;
 	switch sw4 = 1;
 	switch sw5 = 0;
 	switch sw6 = 1;
-	switch sw7_clk = 0;
+	switch sw7 = 0;
 	
 	wire bob;
 	wire bill;
-	instance a4inputnand_bob gareth (sw1, sw2, sw3, sw4 -> bob);
-	instance xor_bill john (sw5, sw6 -> bill);
+	instance a4inputnand gareth (sw1, sw2, sw3, sw4 -> bob);
+	instance xor john (sw5, sw6 -> bill);
 
 	client_dtype.DATA <= bob;
 	client_dtype.CLK <= client_clk;
 	client_dtype.SET <= bill;
-	client_dtype.CLEAR <= sw7_clk;
+	client_dtype.CLEAR <= sw7;
 
 	monitor client_dtype.Q;
 	monitor client_dtype.QBAR;
