@@ -65,6 +65,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # Initialise variables for zooming
         self.zoom = 1.0
+        self.x_zoom = 1.0
         self.visible_cycles = None
         self.previous_signal_traces = {}
 
@@ -92,7 +93,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         visible_width = width / zoom_factor
         visible_height = height / zoom_factor
 
-        max_pan_x = max(0.0, width - visible_width)
+        # Content width expands with x_zoom; allow panning to reach the far edge
+        x_zoom = getattr(self, 'x_zoom', 1.0)
+        content_right = 80 + (width - 120) * x_zoom + 40
+        max_pan_x = max(0.0, content_right - visible_width)
         max_pan_y = max(0.0, height - visible_height)
 
         self.pan_x = max_pan_x * pan_x_pct
@@ -122,14 +126,15 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         canvas_width, canvas_height = size.width, size.height
         box_x_start, box_x_end = 80, canvas_width - 40
         box_y_bot, box_y_top = 20, canvas_height - 20
+        actual_box_x_end = box_x_start + (box_x_end - box_x_start) * self.x_zoom
 
         # 2. Draw outer border layout box
         GL.glColor3f(0.3, 0.4, 0.5)
         GL.glLineWidth(1.5)
         GL.glBegin(GL.GL_LINE_LOOP)
         GL.glVertex2f(box_x_start, box_y_bot)
-        GL.glVertex2f(box_x_end, box_y_bot)
-        GL.glVertex2f(box_x_end, box_y_top)
+        GL.glVertex2f(actual_box_x_end, box_y_bot)
+        GL.glVertex2f(actual_box_x_end, box_y_top)
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
@@ -148,7 +153,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             (len(lst) for lst in visible_signals.values()), default=0
         )
         if num_cycles > 0:
-            cycle_width = (box_x_end - box_x_start) / num_cycles
+            cycle_width = (actual_box_x_end - box_x_start) / num_cycles
 
             GL.glEnable(GL.GL_LINE_STIPPLE)
             GL.glLineStipple(1, 0x00FF)
@@ -222,9 +227,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             GL.glColor3f(0.4, 0.4, 0.4)
             GL.glBegin(GL.GL_LINES)
             GL.glVertex2f(box_x_start, high_y)
-            GL.glVertex2f(box_x_end, high_y)
+            GL.glVertex2f(actual_box_x_end, high_y)
             GL.glVertex2f(box_x_start, low_y)
-            GL.glVertex2f(box_x_end, low_y)
+            GL.glVertex2f(actual_box_x_end, low_y)
             GL.glEnd()
             GL.glDisable(GL.GL_LINE_STIPPLE)
 
@@ -248,7 +253,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glLineWidth(2.0)
                 GL.glBegin(GL.GL_LINES)
                 GL.glVertex2f(box_x_start, channel_divider_y)
-                GL.glVertex2f(box_x_end, channel_divider_y)
+                GL.glVertex2f(actual_box_x_end, channel_divider_y)
                 GL.glEnd()
 
         # Draw drag-to-reorder insertion indicator
@@ -265,7 +270,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             GL.glLineWidth(3.0)
             GL.glBegin(GL.GL_LINES)
             GL.glVertex2f(box_x_start, indicator_y)
-            GL.glVertex2f(box_x_end, indicator_y)
+            GL.glVertex2f(actual_box_x_end, indicator_y)
             GL.glEnd()
             GL.glLineWidth(1.0)
 
@@ -619,11 +624,27 @@ class Gui(wx.Frame):
         self.v_scroll.Bind(wx.EVT_SCROLL, self.on_v_scroll)
         self.h_scroll.Bind(wx.EVT_SCROLL, self.on_h_scroll)
 
-        # Arrange canvas and scrollbars
+        # X-axis zoom slider
+        self.x_zoom_slider = wx.Slider(
+            self.canvas_panel, value=1, minValue=1, maxValue=30,
+            style=wx.SL_HORIZONTAL,
+        )
+        self.x_zoom_value_label = wx.StaticText(self.canvas_panel, label="1×")
+        self.x_zoom_slider.Bind(wx.EVT_SLIDER, self.on_x_zoom)
+        x_zoom_row = wx.BoxSizer(wx.HORIZONTAL)
+        x_zoom_row.Add(
+            wx.StaticText(self.canvas_panel, label="X Zoom:"),
+            0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6,
+        )
+        x_zoom_row.Add(self.x_zoom_slider, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 4)
+        x_zoom_row.Add(self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+
+        # Arrange canvas, scrollbars, and zoom slider
         canvas_sizer = wx.GridBagSizer(0, 0)
         canvas_sizer.Add(self.canvas, pos=(0, 0), flag=wx.EXPAND)
         canvas_sizer.Add(self.v_scroll, pos=(0, 1), flag=wx.EXPAND)
         canvas_sizer.Add(self.h_scroll, pos=(1, 0), flag=wx.EXPAND)
+        canvas_sizer.Add(x_zoom_row, pos=(2, 0), flag=wx.EXPAND)
         canvas_sizer.AddGrowableCol(0)
         canvas_sizer.AddGrowableRow(0)
         self.canvas_panel.SetSizer(canvas_sizer)
@@ -1333,8 +1354,9 @@ class Gui(wx.Frame):
     def on_h_scroll(self, event):
         """Handle horizontal scrollbar scrolling."""
         zoom = getattr(self.canvas, "zoom", 1.0)
+        x_zoom = getattr(self.canvas, "x_zoom", 1.0)
         range_max = 10000
-        thumb_size = int(range_max / zoom)
+        thumb_size = max(1, int(range_max / (zoom * x_zoom)))
         scrollable_x = range_max - thumb_size
 
         if scrollable_x > 0:
@@ -1362,6 +1384,15 @@ class Gui(wx.Frame):
         self.canvas.init = False
         self.canvas.Refresh()
 
+    def on_x_zoom(self, event):
+        """Handle x-axis zoom slider changes."""
+        val = self.x_zoom_slider.GetValue()
+        self.x_zoom_value_label.SetLabel(f"{val}×")
+        self.canvas.x_zoom = float(val)
+        self.canvas.init = False
+        self.update_scrollbars()
+        self.canvas.Refresh()
+
     def on_zoom_in(self, event):
         """Zoom in by 10%."""
         self.canvas.zoom = min(5.0, self.canvas.zoom * 1.1)
@@ -1381,35 +1412,34 @@ class Gui(wx.Frame):
     def update_scrollbars(self):
         """Update scrollbar ranges, thumb sizes, and positions based on canvas state."""
         zoom = getattr(self.canvas, "zoom", 1.0)
+        x_zoom = getattr(self.canvas, "x_zoom", 1.0)
         pan_x_pct = getattr(self.canvas, "pan_x_pct", 0.0)
         pan_y_pct = getattr(self.canvas, "pan_y_pct", 0.0)
 
         range_max = 10000
-        thumb_size = int(range_max / zoom)
+        h_thumb = max(1, int(range_max / (zoom * x_zoom)))
+        v_thumb = max(1, int(range_max / zoom))
 
-        scrollable_x = range_max - thumb_size
-        scrollable_y = range_max - thumb_size
+        scrollable_x = range_max - h_thumb
+        scrollable_y = range_max - v_thumb
 
         pos_x = int(pan_x_pct * scrollable_x) if scrollable_x > 0 else 0
         pos_y = int(pan_y_pct * scrollable_y) if scrollable_y > 0 else 0
 
-        page_size = thumb_size
-
-        self.h_scroll.SetScrollbar(
-            pos_x, thumb_size, range_max, page_size, refresh=True
-        )
-        self.v_scroll.SetScrollbar(
-            pos_y, thumb_size, range_max, page_size, refresh=True
-        )
+        self.h_scroll.SetScrollbar(pos_x, h_thumb, range_max, h_thumb, refresh=True)
+        self.v_scroll.SetScrollbar(pos_y, v_thumb, range_max, v_thumb, refresh=True)
 
     def on_reset_view(self, event):
         """Reset all view parameters back to defaults and refresh canvas."""
         self.canvas.zoom = 1.0
+        self.canvas.x_zoom = 1.0
         self.canvas.pan_x_pct = 0.0
         self.canvas.pan_y_pct = 0.0
         self.canvas.pan_x = 0.0
         self.canvas.pan_y = 0.0
         self.canvas.init = False
+        self.x_zoom_slider.SetValue(1)
+        self.x_zoom_value_label.SetLabel("1×")
         self.canvas.Refresh()
         self.update_scrollbars()
         self.SetStatusText("View reset to default dimensions.")
