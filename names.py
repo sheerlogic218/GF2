@@ -82,12 +82,16 @@ class Names:
         If the name_id is not an index in the names list, return None.
         """
         if type(name_id) not in [int, uuid.UUID]:
-            print(name_id)
             raise TypeError("Name ID must be an integer.")
         return self.inv_name_IDS.get(name_id)
 
     @staticmethod
     def prettify_name(name: str) -> str:
+        if "." in name:
+            device_part, port_part = name.split(".", 1)
+            clean_device_part = device_part.strip("_").split("__")[0]
+            return f"{clean_device_part}.{port_part}"
+
         return name.strip("_").split("__")[0]
 
     def get_pretty_name(self, name_id: int) -> str:

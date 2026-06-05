@@ -67,7 +67,10 @@ class Parser:
         self.gate_counts = {}
 
     def _error_location(self):
-        return f"at line {self.scanner.line_count} pos {self.scanner.line_position}: "
+        if self.symbol:
+            return f"at line {self.symbol.line} pos {self.symbol.pos}: "
+        else:
+            return f"at line {self.scanner.line_count} pos {self.scanner.line_position}: "
 
     def _get_syntax_error(self):
         return f"Syntax Error {self._error_location()}"
@@ -257,9 +260,9 @@ class Parser:
             return [], False
 
     def parse_port(self):
-        # Just return the raw string name, do NOT build devices here anymore.
         if self.symbol.type == Symbol.NAME:
-            port_name = f"__{self.symbol.text}__{self.current_module_name}__"
+            # port_name = f"__{self.symbol.text}__{self.current_module_name}__"
+            port_name = self.symbol.text
             self.next_symbol()
             return port_name
         else:
@@ -392,8 +395,6 @@ class Parser:
 
         source_device_id, source_port_id = self.parse_rhs()
 
-        self.expect(Symbol.PUNCTUATION, ";")
-
         # If assigning to a standalone variable (e.g., A = ... rather than D1.DATA = ...)
         if target_port_id is None:
             # If this variable hasn't been instantiated yet, make it a buffer (1-input AND gate)
@@ -414,6 +415,7 @@ class Parser:
             )
             self.errors.append(error_message)
             self.error_count += 1
+        self.expect(Symbol.PUNCTUATION, ";")
 
     def parse_lhs(self):
         return self.parse_signal_or_port_ref()
@@ -524,9 +526,10 @@ class Parser:
                 self.symbol.type == Symbol.NAME
                 and self.symbol.text in valid_ports
             ):
-                port_name = (
-                    f"__{self.symbol.text}__{self.current_module_name}__"
-                )
+                # port_name = (
+                #     f"__{self.symbol.text}__{self.current_module_name}__"
+                # )
+                port_name = self.symbol.text
                 [port_id] = self.names.lookup([port_name])
                 self.next_symbol()
             else:
@@ -544,7 +547,6 @@ class Parser:
         self.expect(Symbol.KEYWORD, "monitor")
 
         device_id, port_id = self.parse_signal_or_port_ref()
-        self.expect(Symbol.PUNCTUATION, ";")
 
         if device_id is not None:
             error = self.monitors.make_monitor(device_id, port_id)
@@ -556,6 +558,7 @@ class Parser:
                 )
                 self.errors.append(error_message)
                 self.error_count += 1
+        self.expect(Symbol.PUNCTUATION, ";")
 
     def parse_instance(self) -> None:
         self.expect(Symbol.KEYWORD, "instance")
