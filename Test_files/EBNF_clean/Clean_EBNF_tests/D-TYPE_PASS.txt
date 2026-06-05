@@ -1,18 +1,18 @@
-module d_flip_flop : -> ;
+module dtype_full : -> ;
+    switch DATA_in = 1 ;
+    switch SET_in  = 0 ;
+    switch CLR_in  = 0 ;
+    clock  clk [3] ;
  
-    switch D  = 0 ;
-    clock clk [2] ;
-    switch clear = 0;
-    switch set = 0;
-    dtype FF ;
-	
+    dtype FF1 ;
  
-    FF.CLK   <= clk ;
-    FF.DATA  <= D ;
-    FF.SET   <= set ;
-    FF.CLEAR <= clear ;
+    FF1.CLK   <= clk ;
+    FF1.DATA  <= DATA_in ;
+    FF1.SET   <= SET_in ;
+    FF1.CLEAR <= CLR_in ;
  
-    monitor FF.Q ;
-    monitor FF.QBAR ;
+    monitor FF1.Q ;
+    monitor FF1.QBAR ;
+    monitor clk ;
  
 end ;
