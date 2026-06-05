@@ -58,6 +58,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self.last_mouse_x = 0  # previous mouse x position
         self.last_mouse_y = 0  # previous mouse y position
 
+        # Monitor row drag-to-reorder state
+        self._drag_monitor_src = None
+        self._drag_monitor_dst = None
+
         # Initialise variables for zooming
         self.zoom = 1.0
         self.visible_cycles = None
@@ -174,9 +178,29 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             # Render row text identifiers and markers
             monitor_name = self.devices.get_signal_name(device_id, output_id)
             clean_name = self.devices.names.prettify_name(monitor_name)
-            self.render_text(clean_name, self.pan_x + 10, (high_y + low_y) / 2)
+            self.render_text(clean_name, self.pan_x + 16, (high_y + low_y) / 2)
             self.render_text("High", self.pan_x + 50, high_y - 4)
             self.render_text("Low", self.pan_x + 50, low_y - 4)
+
+            # Grip handle (drag-to-reorder indicator)
+            grip_cx = self.pan_x + 7
+            grip_cy = (high_y + low_y) / 2
+            GL.glColor3f(0.35, 0.45, 0.55)
+            GL.glLineWidth(1.0)
+            GL.glBegin(GL.GL_LINE_LOOP)
+            GL.glVertex2f(grip_cx - 6, grip_cy - 8)
+            GL.glVertex2f(grip_cx + 6, grip_cy - 8)
+            GL.glVertex2f(grip_cx + 6, grip_cy + 8)
+            GL.glVertex2f(grip_cx - 6, grip_cy + 8)
+            GL.glEnd()
+            GL.glColor3f(0.6, 0.75, 0.85)
+            GL.glLineWidth(1.5)
+            GL.glBegin(GL.GL_LINES)
+            for bar_dy in (-3.5, 0.0, 3.5):
+                GL.glVertex2f(grip_cx - 3.5, grip_cy + bar_dy)
+                GL.glVertex2f(grip_cx + 3.5, grip_cy + bar_dy)
+            GL.glEnd()
+            GL.glLineWidth(1.0)
 
             # Draw row horizontal boundary reference guidelines
             GL.glEnable(GL.GL_LINE_STIPPLE)
@@ -212,6 +236,24 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glVertex2f(box_x_start, channel_divider_y)
                 GL.glVertex2f(box_x_end, channel_divider_y)
                 GL.glEnd()
+
+        # Draw drag-to-reorder insertion indicator
+        if (self._drag_monitor_src is not None
+                and self._drag_monitor_dst != self._drag_monitor_src):
+            dst = self._drag_monitor_dst
+            src = self._drag_monitor_src
+            indicator_y = (
+                box_y_bot + (dst + 1) * row_height
+                if src < dst
+                else box_y_bot + dst * row_height
+            )
+            GL.glColor3f(1.0, 0.6, 0.0)
+            GL.glLineWidth(3.0)
+            GL.glBegin(GL.GL_LINES)
+            GL.glVertex2f(box_x_start, indicator_y)
+            GL.glVertex2f(box_x_end, indicator_y)
+            GL.glEnd()
+            GL.glLineWidth(1.0)
 
         GL.glFlush()
         self.SwapBuffers()
@@ -257,6 +299,23 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             return signal_list
         previous_signal_list = self.previous_signal_traces.get(monitor, [])
         return (previous_signal_list + signal_list)[-self.visible_cycles :]
+
+    def _get_monitor_row(self, screen_x, screen_y):
+        """Return the monitor row index at the given screen position, or -1."""
+        size = self.GetClientSize()
+        canvas_height = max(1, size.height)
+        gl_y = self.pan_y + screen_y / self.zoom
+        box_y_bot, box_y_top = 20, canvas_height - 20
+        num_monitors = len(self.monitors.monitors_dict)
+        if num_monitors == 0 or gl_y < box_y_bot or gl_y > box_y_top:
+            return -1
+        row_height = (box_y_top - box_y_bot) / num_monitors
+        k = int((gl_y - box_y_bot) / row_height)
+        return max(0, min(k, num_monitors - 1))
+
+    def _in_label_area(self, screen_x):
+        """Return True if screen_x is within the row-label column."""
+        return self.pan_x + screen_x / self.zoom < 80
 
     def on_paint(self, event):
         """Handle the paint event by validating the DC and calling render."""
@@ -316,11 +375,52 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 if gui:
                     gui.update_scrollbars()
 
-        # Handle mouse dragging for panning
+        # Handle left button down: start monitor drag or pan
         elif event.ButtonDown(wx.MOUSE_BTN_LEFT):
-            self.last_mouse_x, self.last_mouse_y = event.GetPosition()
+            mx, my = event.GetPosition()
+            self.last_mouse_x, self.last_mouse_y = mx, my
+            if self._in_label_area(mx):
+                row = self._get_monitor_row(mx, my)
+                if row >= 0:
+                    self._drag_monitor_src = row
+                    self._drag_monitor_dst = row
+                    return
+            self._drag_monitor_src = None
+
+        elif event.ButtonUp(wx.MOUSE_BTN_LEFT):
+            if self._drag_monitor_src is not None:
+                src, dst = self._drag_monitor_src, self._drag_monitor_dst
+                self._drag_monitor_src = None
+                self._drag_monitor_dst = None
+                self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+                self.init = False
+                self.Refresh()
+                if src != dst and gui and hasattr(gui, "on_monitor_reorder"):
+                    gui.on_monitor_reorder(src, dst)
+                return
+
+        elif event.Moving():
+            mx, my = event.GetPosition()
+            if (len(self.monitors.monitors_dict) > 0
+                    and self._in_label_area(mx)
+                    and self._get_monitor_row(mx, my) >= 0):
+                self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+            else:
+                self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+
         elif event.Dragging() and event.LeftIsDown():
             curr_x, curr_y = event.GetPosition()
+
+            # Monitor row drag takes priority over panning
+            if self._drag_monitor_src is not None:
+                row = self._get_monitor_row(curr_x, curr_y)
+                if row >= 0:
+                    self._drag_monitor_dst = row
+                self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+                self.init = False
+                self.Refresh()
+                return
+
             dx = curr_x - self.last_mouse_x
             dy = curr_y - self.last_mouse_y
             self.last_mouse_x, self.last_mouse_y = curr_x, curr_y
@@ -1184,6 +1284,20 @@ class Gui(wx.Frame):
             self.log("Removed monitor: " + signal_name)
         else:
             self.SetStatusText("Error: monitor is not active: " + signal_name)
+        self.update_monitors_list()
+        self.canvas.render()
+
+    def on_monitor_reorder(self, src, dst):
+        """Reorder monitors_dict when the user drag-drops a canvas waveform row."""
+        keys = list(self.monitors.monitors_dict.keys())
+        if not (0 <= src < len(keys) and 0 <= dst < len(keys)):
+            return
+        moved = keys.pop(src)
+        keys.insert(dst, moved)
+        old_dict = dict(self.monitors.monitors_dict)
+        self.monitors.monitors_dict.clear()
+        for key in keys:
+            self.monitors.monitors_dict[key] = old_dict[key]
         self.update_monitors_list()
         self.canvas.render()
 
