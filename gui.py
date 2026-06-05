@@ -172,9 +172,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
             # Render row text identifiers and markers
             monitor_name = self.devices.get_signal_name(device_id, output_id)
-            self.render_text(
-                monitor_name, self.pan_x + 10, (high_y + low_y) / 2
-            )
+            clean_name = self.devices.names.prettify_name(monitor_name)
+            self.render_text(clean_name, self.pan_x + 10, (high_y + low_y) / 2)
             self.render_text("High", self.pan_x + 50, high_y - 4)
             self.render_text("Low", self.pan_x + 50, low_y - 4)
 
@@ -965,23 +964,23 @@ class Gui(wx.Frame):
         monitored_signals, non_monitored_signals = (
             self.monitors.get_signal_names()
         )
-        # TODO
+
         display_names = [
-            self.names.prettify_name(name) + " (on)"
-            for name in monitored_signals
+            clean_name + " (on)" for clean_name, raw_name in monitored_signals
         ]
         display_names.extend(
-            [self.names.prettify_name(name) for name in non_monitored_signals]
+            [clean_name for clean_name, raw_name in non_monitored_signals]
         )
         self.monitors_list.Set(display_names)
+
         self._monitor_choices = {
-            self.names.prettify_name(name) + " (on)": name
-            for name in monitored_signals
+            clean_name + " (on)": raw_name
+            for clean_name, raw_name in monitored_signals
         }
         self._monitor_choices.update(
             {
-                self.names.prettify_name(name): name
-                for name in non_monitored_signals
+                clean_name: raw_name
+                for clean_name, raw_name in non_monitored_signals
             }
         )
 
@@ -1061,14 +1060,18 @@ class Gui(wx.Frame):
         if selection == wx.NOT_FOUND:
             self.SetStatusText("Error: please select a switch first.")
             return
-        switch_name = self.switch_choice.GetString(selection)
-        switch_id = self.names.query(switch_name)
+        clean_switch_name = self.switch_choice.GetString(selection)
+        raw_switch_name = self._switch_map.get(clean_switch_name)
+        switch_id = self.names.query(raw_switch_name)
+
         if self.devices.set_switch(switch_id, self.devices.HIGH):
-            self.SetStatusText(f"Switch {switch_name} set ON.")
-            self.log(f"Switch {switch_name} set ON.")
+            self.SetStatusText(f"Switch {clean_switch_name} set ON.")
+            self.log(f"Switch {clean_switch_name} set ON.")
             self.canvas.render()
         else:
-            self.SetStatusText(f"Error: could not set switch {switch_name}.")
+            self.SetStatusText(
+                f"Error: could not set switch {clean_switch_name}."
+            )
 
     def on_switch_off(self, event):
         """Handle the event when the user clicks the switch off button."""
@@ -1076,14 +1079,19 @@ class Gui(wx.Frame):
         if selection == wx.NOT_FOUND:
             self.SetStatusText("Error: please select a switch first.")
             return
-        switch_name = self.switch_choice.GetString(selection)
-        switch_id = self.names.query(switch_name)
+
+        clean_switch_name = self.switch_choice.GetString(selection)
+        raw_switch_name = self._switch_map.get(clean_switch_name)
+        switch_id = self.names.query(raw_switch_name)
+
         if self.devices.set_switch(switch_id, self.devices.LOW):
-            self.SetStatusText(f"Switch {switch_name} set OFF.")
-            self.log(f"Switch {switch_name} set OFF.")
+            self.SetStatusText(f"Switch {clean_switch_name} set OFF.")
+            self.log(f"Switch {clean_switch_name} set OFF.")
             self.canvas.render()
         else:
-            self.SetStatusText(f"Error: could not set switch {switch_name}.")
+            self.SetStatusText(
+                f"Error: could not set switch {clean_switch_name}."
+            )
 
     def on_add_monitor(self, event):
         """Handle the event when the user clicks the add monitor button."""
@@ -1267,4 +1275,13 @@ class Gui(wx.Frame):
     def _get_switch_names(self):
         """Return a list of switch device name strings from the backend."""
         switch_ids = self.devices.find_devices(self.devices.SWITCH)
-        return [self.names.get_name_string(sid) for sid in switch_ids]
+        raw_names = [self.names.get_name_string(sid) for sid in switch_ids]
+
+        self._switch_map = {}
+        display_names = []
+        for raw_name in raw_names:
+            clean_name = self.names.prettify_name(raw_name)
+            self._switch_map[clean_name] = raw_name
+            display_names.append(clean_name)
+
+        return display_names

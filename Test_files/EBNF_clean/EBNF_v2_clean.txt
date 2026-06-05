@@ -16,7 +16,7 @@ declaration = wire_decl
             | switch_decl
             | dtype_decl ;
 
-wire_decl   = "wire"   , name , [ "[" , integer , "]" ] , ";" ;
+wire_decl   = "wire"   , name , ";" ;
 clock_decl  = "clock"  , name , "[" , integer , "]"     , ";" ;
 switch_decl = "switch" , name , "=" , ( "0" | "1" )     , ";" ;
 dtype_decl  = "dtype"  , name                           , ";" ;
@@ -40,7 +40,7 @@ port_name   = "CLK" | "DATA" | "SET" | "CLEAR" | "Q" | "QBAR" ;
 
 monitor     = "monitor" , ( signal_ref | port_ref ) , ";" ;
 
-instance	= "instance", name, "(", bind_list, "->", bind_list, ")", ";";
+instance	= "instance", name, name, "(", bind_list, "->", bind_list, ")", ";";
 
 bind_list  = [ signal_ref , { "," , signal_ref } ] ;
 

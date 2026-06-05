@@ -110,21 +110,30 @@ class Monitors:
             v += [self.get_monitor_signal(*k)]
 
     def get_signal_names(self):
-        """Return two signal name lists: monitored and not monitored."""
+        """Return two lists of signal name tuples: monitored and not monitored.
+        Each tuple is in the format (clean_name, raw_name) to support GUI mapping.
+        """
         non_monitored_signal_list = []
         monitored_signal_list = []
+
         for device_id, output_id in self.monitors_dict:
-            monitor_name = self.devices.get_signal_name(device_id, output_id)
-            monitored_signal_list.append(monitor_name)
+            raw_name = self.devices.get_signal_name(device_id, output_id)
+            if raw_name:
+                clean_name = self.names.prettify_name(raw_name)
+                monitored_signal_list.append((clean_name, raw_name))
 
         for device_id in self.devices.find_devices():
             device = self.devices.get_device(device_id)
             for output_id in device.outputs:
                 if (device_id, output_id) not in self.monitors_dict:
-                    signal_name = self.devices.get_signal_name(
+                    raw_name = self.devices.get_signal_name(
                         device_id, output_id
                     )
-                    non_monitored_signal_list.append(signal_name)
+                    if raw_name:
+                        clean_name = self.names.prettify_name(raw_name)
+                        non_monitored_signal_list.append(
+                            (clean_name, raw_name)
+                        )
 
         return [monitored_signal_list, non_monitored_signal_list]
 
@@ -146,6 +155,7 @@ class Monitors:
         length_list = []  # for storing name lengths
         for device_id, output_id in self.monitors_dict:
             monitor_name = self.devices.get_signal_name(device_id, output_id)
+            monitor_name = self.names.prettify_name(monitor_name)
             name_length = len(monitor_name)
             length_list.append(name_length)
         if length_list:  # if the list is not empty
@@ -158,6 +168,7 @@ class Monitors:
         margin = self.get_margin()
         for device_id, output_id in self.monitors_dict:
             monitor_name = self.devices.get_signal_name(device_id, output_id)
+            monitor_name = self.names.prettify_name(monitor_name)
             name_length = len(monitor_name)
             signal_list = self.monitors_dict[(device_id, output_id)]
             print(monitor_name + (margin - name_length) * " ", end=": ")
