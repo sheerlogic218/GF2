@@ -73,21 +73,30 @@ def main(arg_list):
         [path] = arguments
         scanner = Scanner(path, names)
         parser = Parser(names, devices, network, monitors, scanner)
-        if parser.parse_network():
+        try:
+            if parser.parse_network():
 
-            for device in parser.devices.devices_list:
-                print(parser.names.inv_name_IDS[device.device_kind])
-            print(parser.names.inv_name_IDS)
+                for device in parser.devices.devices_dict.values():
+                    print(parser.names.inv_name_IDS[device.device_kind])
+                print(parser.names.inv_name_IDS)
 
-            print(parser.module_mappings)
+                print(parser.module_mappings)
 
-            # Initialise an instance of the gui.Gui() class
-            app = wx.App()
-            gui = Gui(
-                "Logic Simulator", path, names, devices, network, monitors
-            )
-            gui.Show(True)
-            app.MainLoop()
+                # Initialise an instance of the gui.Gui() class
+                app = wx.App()
+                gui = Gui(
+                    "Logic Simulator", path, names, devices, network, monitors
+                )
+                gui.Show(True)
+                app.MainLoop()
+            else:
+                for error in parser.errors:
+                    print(error)
+        except SyntaxError as e:
+            # easy fix for unexpected characters
+            print(e)
+            for error in parser.errors[:-1]:
+                print(error)
 
 
 if __name__ == "__main__":

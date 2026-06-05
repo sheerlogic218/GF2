@@ -9,6 +9,8 @@ Scanner - reads definition file and translates characters into symbols.
 Symbol - encapsulates a symbol and stores its properties.
 """
 
+import uuid
+
 from names import Names
 
 
@@ -73,19 +75,30 @@ class Scanner:
 
         self.keywords = [
             "module",
+            "end",
             "wire",
             "clock",
             "switch",
             "dtype",
             "monitor",
-            "end",
             "instance",
         ]
-        self.operators = {
-            "AND": "*",
-            "OR": "+",
-            "XOR": "^",
-        }
+        self.punctuation = [
+            "=",
+            "+",
+            "*",
+            "^",
+            "!",
+            ",",
+            ".",
+            ";",
+            ":",
+            "[",
+            "]",
+            "(",
+            ")",
+            " ",
+        ]
         # NAND, NOR ARE FUCKED
         # TODO
         self.names.lookup(self.keywords)
@@ -122,7 +135,6 @@ class Scanner:
         if self.get_current_char() + self.get_next_char() == "//":
             while self.get_current_char() != "\n":
                 self.advance()
-            print(self.get_current_char())
             self.advance()
 
     def skip_whitespace_and_comments(self) -> None:
@@ -133,7 +145,7 @@ class Scanner:
             self.skip_whitespace()
             self.skip_comments()
 
-    def get_symbol(self):
+    def get_symbol(self) -> tuple[Symbol | str, bool]:
         """Translate the next sequence of characters into a symbol."""
         self.skip_whitespace_and_comments()
 
@@ -146,13 +158,13 @@ class Scanner:
         # End of file
         if char == "":
             symbol.type = Symbol.EOF
-            return symbol
+            return symbol, True
 
-        if char in "=+*^!,.;:[]() ":
+        if char in self.punctuation:
             symbol.type = Symbol.PUNCTUATION
             symbol.text = char
             self.advance()
-            return symbol
+            return symbol, True
 
         # Words/Keywords
         if char.isalpha():
@@ -168,8 +180,9 @@ class Scanner:
                 symbol.id = self.names.query(text)
             else:
                 symbol.type = Symbol.NAME
-                [symbol.id] = self.names.lookup([text])
-            return symbol
+                # [symbol.id] = self.names.lookup([text])
+                # symbol.id = uuid.uuid4()
+            return symbol, True
 
         # Numbers
         if char.isdigit():
@@ -181,7 +194,7 @@ class Scanner:
             symbol.type = Symbol.NUMBER
             symbol.text = text
             symbol.id = int(text)
-            return symbol
+            return symbol, True
 
         # multi character punctuation
         if (text := char + self.get_next_char()) in ["->", "<="]:
@@ -190,6 +203,7 @@ class Scanner:
             [symbol.id] = self.names.lookup([text])
             self.advance()
             self.advance()
-            return symbol
+            return symbol, True
 
-        raise SyntaxError(f"Invalid character {ord(char)}")
+        symbol.text = char
+        return symbol, False

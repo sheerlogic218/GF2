@@ -104,7 +104,6 @@ class Devices:
 
         self.names: Names = names
 
-        self.devices_list: list = []
         self.devices_dict: dict[UUID, Device] = {}
 
         gate_strings: list[str] = ["AND", "OR", "NAND", "NOR", "XOR"]
@@ -150,13 +149,8 @@ class Devices:
 
         self.max_gate_inputs: int = 16
 
-    def get_device(self, device_id: UUID) -> Device:
+    def get_device(self, device_id: UUID) -> Device | None:
         """Return the Device object corresponding to device_id."""
-        ###CHANGE to dict
-        for device in self.devices_list:
-            if device.device_id == device_id:
-                return device
-        return None
         return self.devices_dict.get(device_id)
 
     def find_devices(self, device_kind: str | None = None):
@@ -165,19 +159,18 @@ class Devices:
         Return a list of all device IDs in the network if no device_kind is
         specified.
         """
-        device_id_list = []
-        for device in self.devices_list:
-            if device_kind is None:
-                device_id_list.append(device.device_id)
-            elif device.device_kind == device_kind:
-                device_id_list.append(device.device_id)
-        return device_id_list
+        if device_kind is None:
+            return list(self.devices_dict.keys())
+        return [
+            device_id
+            for device_id, device in self.devices_dict.items()
+            if device.device_kind == device_kind
+        ]
 
     def add_device(self, device_id, device_kind):
         """Add the specified device to the network."""
         new_device = Device(device_id)
         new_device.device_kind = device_kind
-        self.devices_list.append(new_device)
         self.devices_dict[device_id] = new_device
 
     def add_input(self, device_id, input_id):
@@ -270,12 +263,11 @@ class Devices:
 
     def make_gate(self, device_id, device_kind, no_of_inputs: int):
         """Make logic gates with the specified number of inputs."""
-        # I DISLIKE, CHANGE TO INPUT CUSTOM INPUT ID
         self.add_device(device_id, device_kind)
         self.add_output(device_id, output_id=None)
 
         for input_number in range(1, no_of_inputs + 1):
-            input_name = "".join(["I", str(input_number)])
+            input_name = f"I{input_number}__{device_id}"
             [input_id] = self.names.lookup([input_name])
             self.add_input(device_id, input_id)
 
@@ -294,7 +286,7 @@ class Devices:
         Set the memory of the D-types to a random state and make the clocks
         begin from a random point in their cycles.
         """
-        for device in self.devices_list:
+        for device in self.devices_dict.values():
             if device.device_kind == self.D_TYPE:
                 device.dtype_memory = random.choice([self.LOW, self.HIGH])
 

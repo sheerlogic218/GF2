@@ -31,7 +31,7 @@ def devices_with_items():
 def test_get_device(devices_with_items):
     """Test if get_device returns the correct device."""
     names = devices_with_items.names
-    for device in devices_with_items.devices_list:
+    for device in devices_with_items.devices_dict.values():
         assert devices_with_items.get_device(device.device_id) == device
 
         # get_device should return None for non-device IDs

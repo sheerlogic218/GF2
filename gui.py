@@ -965,18 +965,24 @@ class Gui(wx.Frame):
         monitored_signals, non_monitored_signals = (
             self.monitors.get_signal_names()
         )
+        # TODO
         display_names = [
-            name.split("__")[1] + " (on)" for name in monitored_signals
+            self.names.prettify_name(name) + " (on)"
+            for name in monitored_signals
         ]
         display_names.extend(
-            [name.split("__")[1] for name in non_monitored_signals]
+            [self.names.prettify_name(name) for name in non_monitored_signals]
         )
         self.monitors_list.Set(display_names)
         self._monitor_choices = {
-            name + " (on)": name for name in monitored_signals
+            self.names.prettify_name(name) + " (on)": name
+            for name in monitored_signals
         }
         self._monitor_choices.update(
-            {name: name for name in non_monitored_signals}
+            {
+                self.names.prettify_name(name): name
+                for name in non_monitored_signals
+            }
         )
 
     def on_last_cycles_change(self, event):

@@ -50,7 +50,9 @@ class Names:
         if not isinstance(num_error_codes, int):
             raise TypeError("Expected num_error_codes to be an integer.")
         self.error_code_count += num_error_codes
-        return range(self.error_code_count - num_error_codes, self.error_code_count)
+        return range(
+            self.error_code_count - num_error_codes, self.error_code_count
+        )
 
     def query(self, name_string):
         """Return the corresponding name ID for name_string.
@@ -82,3 +84,11 @@ class Names:
         if type(name_id) not in [int, uuid.UUID]:
             raise TypeError("Name ID must be an integer.")
         return self.inv_name_IDS.get(name_id)
+
+    @staticmethod
+    def prettify_name(name: str) -> str:
+        return name.strip("_").split("__")[0]
+
+    def get_pretty_name(self, name_id: int) -> str:
+        name = self.get_name_string(name_id)
+        return self.prettify_name(name)
