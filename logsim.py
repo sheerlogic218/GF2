@@ -80,8 +80,6 @@ def main(arg_list):
                     print(parser.names.inv_name_IDS[device.device_kind])
                 print(parser.names.inv_name_IDS)
 
-                print(parser.module_mappings)
-
                 # Initialise an instance of the gui.Gui() class
                 app = wx.App()
                 gui = Gui(

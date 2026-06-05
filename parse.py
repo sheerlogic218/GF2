@@ -428,7 +428,6 @@ class Parser:
             "XOR": [self.parse_factor, "^", self.devices.XOR],
         }
         inputs = [gates[gate_type][0]()]
-        print(inputs)
         while self.accept(Symbol.PUNCTUATION, gates[gate_type][1]):
             inputs.append(gates[gate_type][0]())
 
@@ -454,7 +453,6 @@ class Parser:
         else:
             self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
 
-            print(inputs)
         for i, (src_dev, src_port) in enumerate(inputs, start=1):
             [input_port_id] = self.names.lookup([f"I{i}__{gate_id}"])
 
