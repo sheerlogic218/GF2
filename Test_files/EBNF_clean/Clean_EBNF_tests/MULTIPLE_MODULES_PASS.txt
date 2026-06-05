@@ -1,26 +1,26 @@
-module half_adder : -> ;
+module half_adder : C -> ;
  
     switch A = 0 ;
     switch B = 0 ;
  
     wire sum ;
     wire carry ;
- 
+
     sum   = A ^ B ;
     carry = A * B ;
  
     monitor sum ;
     monitor carry ;
- 
+
 end ;
  
 module inverter : -> ;
- 
+
     switch X = 1 ;
     wire out ;
- 
+
     out = !X ;
- 
+    instance half_adder barry(X->);
     monitor out ;
  
 end ;

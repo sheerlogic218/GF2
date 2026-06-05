@@ -82,6 +82,7 @@ class Names:
         If the name_id is not an index in the names list, return None.
         """
         if type(name_id) not in [int, uuid.UUID]:
+            print(name_id)
             raise TypeError("Name ID must be an integer.")
         return self.inv_name_IDS.get(name_id)
 

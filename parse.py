@@ -126,11 +126,35 @@ class Parser:
         """Parse the circuit definition file."""
         # get first symbol
         self.next_symbol()
-        # parse first module
-        self.parse_prog_defn()
-        # if anymore modules, parse
+        last_module = None
+
         while self.symbol.type != Symbol.EOF:
             self.parse_prog_defn()
+            last_module = self.current_module_name
+
+        # load the last module
+        if last_module and self.error_count == 0:
+            self.instantiate_module(last_module, "Main", [], [])
+
+        # Explicit unconnected input check
+        if self.error_count == 0:
+            unconnected = []
+            for device_id in self.devices.find_devices():
+                device = self.devices.get_device(device_id)
+                for input_id in device.inputs:
+                    if (
+                        self.network.get_connected_output(device_id, input_id)
+                        is None
+                    ):
+                        dev_name = self.names.get_pretty_name(device_id)
+                        port_name = self.names.get_pretty_name(input_id)
+                        unconnected.append(f"{dev_name}.{port_name}")
+
+            if unconnected:
+                self.errors.append(
+                    f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
+                )
+                self.error_count += 1
         # no errors, returns True
         return self.error_count == 0
 
@@ -183,10 +207,11 @@ class Parser:
 
         # Save module inputs/outputs to dict for instancing later
         # TODO: come back to this
-        self.module_mappings[self.current_module_name] = [
-            module_inputs,
-            module_outputs,
-        ]
+        self.module_mappings[self.current_module_name] = {
+            "inputs": module_inputs,
+            "outputs": module_outputs,
+            "symbols": [],
+        }
 
         # End of module header
         if not self.expect(Symbol.PUNCTUATION, ";"):
@@ -205,8 +230,11 @@ class Parser:
                 self.error_count += 1
                 break
             # parse module lines
-            self.parse_statement()
-
+            # self.parse_statement()
+            self.module_mappings[self.current_module_name]["symbols"].append(
+                self.symbol
+            )
+            self.next_symbol()
         # end of module
         self.expect(Symbol.KEYWORD, "end")
         self.expect(Symbol.PUNCTUATION, ";")
@@ -229,16 +257,9 @@ class Parser:
             return [], False
 
     def parse_port(self):
+        # Just return the raw string name, do NOT build devices here anymore.
         if self.symbol.type == Symbol.NAME:
             port_name = f"__{self.symbol.text}__{self.current_module_name}__"
-            # create 1-AND buffer as inputs
-            [port_id] = self.names.lookup([port_name])
-            if self.devices.get_device(port_id) is None:
-                self.devices.make_device(port_id, self.devices.AND, 1)
-
-            # Wires and buffers receive their input on port 'I1'
-            [target_port_id] = self.names.lookup([f"I1__{port_name}"])
-
             self.next_symbol()
             return port_name
         else:
@@ -407,6 +428,7 @@ class Parser:
             "XOR": [self.parse_factor, "^", self.devices.XOR],
         }
         inputs = [gates[gate_type][0]()]
+        print(inputs)
         while self.accept(Symbol.PUNCTUATION, gates[gate_type][1]):
             inputs.append(gates[gate_type][0]())
 
@@ -432,11 +454,22 @@ class Parser:
         else:
             self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
 
+            print(inputs)
         for i, (src_dev, src_port) in enumerate(inputs, start=1):
             [input_port_id] = self.names.lookup([f"I{i}__{gate_id}"])
-            self.network.make_connection(
+
+            # create device if it doesnt exist
+            if self.devices.get_device(src_dev) is None:
+                self.devices.make_device(src_dev, self.devices.AND, 1)
+
+            error = self.network.make_connection(
                 src_dev, src_port, gate_id, input_port_id
             )
+            if error != self.network.NO_ERROR:
+                self.errors.append(
+                    f"Semantic Error: Gate connection failed. E:{error}, {self.map_error_code[error]}"
+                )
+                self.error_count += 1
 
         return gate_id, None
 
@@ -473,7 +506,7 @@ class Parser:
             )
             return gate_id, None
 
-        return signal, None
+        return signal
 
     def parse_signal_or_port_ref(self) -> tuple[str, str]:
         # Capture the device name
@@ -499,7 +532,6 @@ class Parser:
                 [port_id] = self.names.lookup([port_name])
                 self.next_symbol()
             else:
-                # TODO: error handling
                 error_message = (
                     self._get_syntax_error()
                     + f"Expected valid port_name, got '{self.symbol.text}'."
@@ -520,7 +552,6 @@ class Parser:
             error = self.monitors.make_monitor(device_id, port_id)
 
             if error != self.monitors.NO_ERROR:
-                # TODO: error handling
                 error_message = (
                     self._get_semantic_error()
                     + f"Failed to add monitor to '{self.names.get_pretty_name(device_id)}'. E:{error}, {self.map_error_code[error]}"
@@ -531,6 +562,7 @@ class Parser:
     def parse_instance(self) -> None:
         self.expect(Symbol.KEYWORD, "instance")
 
+        # Module name
         if self.symbol.type == Symbol.NAME:
             # TODO: check module name exists
             module_name = self.symbol.text
@@ -538,6 +570,14 @@ class Parser:
         else:
             # TODO: error handling
             # f"module {module_name} not found or declared yet."
+            self.expect(Symbol.NAME)
+            return
+
+        # Instance name
+        if self.symbol.type == Symbol.NAME:
+            instance_name = self.symbol.text
+            self.next_symbol()
+        else:
             self.expect(Symbol.NAME)
             return
 
@@ -553,14 +593,128 @@ class Parser:
         self.expect(Symbol.PUNCTUATION, ";")
 
         # check form of I/O against module def
-        expected_inputs, expected_outputs = self.module_mappings[module_name]
+        expected_inputs = self.module_mappings[module_name]["inputs"]
+        expected_outputs = self.module_mappings[module_name]["outputs"]
         if len(module_inputs) != len(expected_inputs):
+            error_message = (
+                self._get_semantic_error()
+                + f"Instance inputs do not match module inputs [{len(module_inputs)}]."
+            )
+            self.errors.append(error_message)
             self.error_count += 1
         if len(module_outputs) != len(expected_outputs):
+            error_message = (
+                self._get_semantic_error()
+                + f"Instance outputs do not match module outputs [{len(module_outputs)}]."
+            )
+            self.errors.append(error_message)
             self.error_count += 1
 
         # re-instantiate the module in this place
-        # TODO: make module instance
+        unique_instance_scope = f"{instance_name}__{self.current_module_name}"
+
+        self.instantiate_module(
+            module_name, unique_instance_scope, module_inputs, module_outputs
+        )
+
+    def instantiate_module(
+        self, module_name, instance_name, bound_inputs, bound_outputs
+    ):
+        template = self.module_mappings.get(module_name)
+        if not template:
+            error_message = (
+                self._get_semantic_error()
+                + f"Module '{module_name}' is not defined."
+            )
+            self.errors.append(error_message)
+            self.error_count += 1
+            return
+
+        # # Inputs
+        instance_input_ids = []
+        for port_name in template["inputs"]:
+            scoped_port = f"__{port_name}__{instance_name}__"
+            [inst_in_id] = self.names.lookup([scoped_port])
+            self.devices.make_device(inst_in_id, self.devices.AND, 1)
+            instance_input_ids.append(inst_in_id)
+
+        for caller_sig, inst_in_id in zip(bound_inputs, instance_input_ids):
+            caller_dev, caller_port = caller_sig
+
+            if self.devices.get_device(caller_dev) is None:
+                self.devices.make_device(caller_dev, self.devices.AND, 1)
+
+            [inst_in_port] = self.names.lookup([f"I1__{inst_in_id}"])
+            error = self.network.make_connection(
+                caller_dev, caller_port, inst_in_id, inst_in_port
+            )
+            if error != self.network.NO_ERROR:
+                self.errors.append(
+                    f"Semantic Error: Instance input binding failed. E:{error}"
+                )
+                self.error_count += 1
+
+        instance_output_ids = []
+        for port_name in template["outputs"]:
+            scoped_port = f"__{port_name}__{instance_name}__"
+            [inst_out_id] = self.names.lookup([scoped_port])
+            self.devices.make_device(inst_out_id, self.devices.AND, 1)
+            instance_output_ids.append(inst_out_id)
+        for inst_out_id, caller_sig in zip(instance_output_ids, bound_outputs):
+            caller_dev, caller_port = caller_sig
+
+            if self.devices.get_device(caller_dev) is None:
+                self.devices.make_device(caller_dev, self.devices.AND, 1)
+
+            if caller_port is None:
+                [caller_port] = self.names.lookup([f"I1__{caller_dev}"])
+
+            error = self.network.make_connection(
+                inst_out_id, None, caller_dev, caller_port
+            )
+            if error != self.network.NO_ERROR:
+                self.errors.append(
+                    f"Semantic Error: Instance output binding failed. E:{error}"
+                )
+                self.error_count += 1
+
+        # "playback" the saved symbols
+        previous_module_name = self.current_module_name
+        self.current_module_name = instance_name
+
+        previous_symbol = self.symbol
+        original_next_symbol = self.next_symbol
+
+        class TokenStream:
+            def __init__(self, symbols):
+                self.symbols = symbols
+                self.ptr = 0
+
+            def get_next(self):
+                if self.ptr < len(self.symbols):
+                    sym = self.symbols[self.ptr]
+                    self.ptr += 1
+                    return sym
+                sym = Symbol()
+                sym.type = Symbol.EOF
+                return sym
+
+        stream = TokenStream(template["symbols"])
+
+        # Override the parser's feed to read from our stored symbols
+        def mock_next_symbol():
+            self.symbol = stream.get_next()
+
+        self.next_symbol = mock_next_symbol
+        self.next_symbol()  # Load the first token of the module body
+
+        while self.symbol.type != Symbol.EOF:
+            self.parse_statement()
+
+        # Restore original parser state
+        self.next_symbol = original_next_symbol
+        self.symbol = previous_symbol
+        self.current_module_name = previous_module_name
 
     def parse_bind_list(self):
         signals = []
