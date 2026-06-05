@@ -12,6 +12,7 @@ Gui - configures the main window and all the widgets.
 import datetime
 
 import wx
+import wx.aui
 import wx.glcanvas as wxcanvas
 from OpenGL import GL, GLUT
 
@@ -470,18 +471,14 @@ class Gui(wx.Frame):
         menuBar.Append(helpMenu, "&Help")
 
         # ── Outer horizontal splitter (simulator | file viewer) ─────────────
-        # SP_LIVE_UPDATE gives smooth dragging; SP_NO_XP_THEME keeps it clean.
         self.outer_splitter = wx.SplitterWindow(
             self, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
         )
         self.outer_splitter.SetSashGravity(0.0)  # allocate more space to left pane
-
         self.outer_splitter.SetMinimumPaneSize(200)
 
         # Left pane wraps the existing horizontal (controls / canvas) layout
         self.left_pane = wx.Panel(self.outer_splitter)
-
-        #ensure minimum size of left pane to prevent splitter collapse when viewer is shown
         self.left_pane.SetMinSize((650, -1))
 
         # Right pane: file viewer – built before the splitter is configured
@@ -508,7 +505,7 @@ class Gui(wx.Frame):
         self.v_scroll.Bind(wx.EVT_SCROLL, self.on_v_scroll)
         self.h_scroll.Bind(wx.EVT_SCROLL, self.on_h_scroll)
 
-        # Arrange canvas and scrollbars like on a document
+        # Arrange canvas and scrollbars
         canvas_sizer = wx.GridBagSizer(0, 0)
         canvas_sizer.Add(self.canvas, pos=(0, 0), flag=wx.EXPAND)
         canvas_sizer.Add(self.v_scroll, pos=(0, 1), flag=wx.EXPAND)
@@ -517,48 +514,57 @@ class Gui(wx.Frame):
         canvas_sizer.AddGrowableRow(0)
         self.canvas_panel.SetSizer(canvas_sizer)
 
+        # ── Base Control Panel & AUI Management Setup ────────────────────────
         self.top_panel = wx.Panel(self.splitter)
+        self.top_panel.SetMinSize((-1, 170))
+        
+        self.aui_manager = wx.aui.AuiManager(self.top_panel)
 
-        # ── Widgets ──────────────────────────────────────────────────────────
-        self.cycles_label = wx.StaticText(self.top_panel, wx.ID_ANY, "Cycles")
+        # FIX: Create the sub-pane window panels BEFORE using them as parents
+        sim_pane = wx.Panel(self.top_panel)
+        switch_pane = wx.Panel(self.top_panel)
+        monitor_pane = wx.Panel(self.top_panel)        
+        console_pane = wx.Panel(self.top_panel)
+
+        # ── Widgets (Now attached to their correct, existing parents) ─────────
+        self.cycles_label = wx.StaticText(sim_pane, wx.ID_ANY, "Cycles")
         self.spin = wx.SpinCtrl(
-            self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
+            sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
         )
         self.run_button = wx.Button(
-            self.top_panel, wx.ID_ANY, "▶", size=(32, 28)
+            sim_pane, wx.ID_ANY, "▶", size=(32, 28)
         )
         self.continue_button = wx.Button(
-            self.top_panel, wx.ID_ANY, "+10", size=(45, 28)
+            sim_pane, wx.ID_ANY, "+10", size=(45, 28)
         )
-        self.last_cycles_check = wx.CheckBox(self.top_panel, wx.ID_ANY, "Last")
+        self.last_cycles_check = wx.CheckBox(sim_pane, wx.ID_ANY, "Last")
         self.last_cycles_spin = wx.SpinCtrl(
-            self.top_panel, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
+            sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
+        )
+        self.reset_button = wx.Button(
+            sim_pane, wx.ID_ANY, "↺", size=(32, 28)
         )
 
         self.switch_label = wx.StaticText(
-            self.top_panel, wx.ID_ANY, "Select switch:"
+            switch_pane, wx.ID_ANY, "Select switch:"
         )
         self.switch_choice = wx.Choice(
-            self.top_panel, wx.ID_ANY, choices=self._get_switch_names()
+            switch_pane, wx.ID_ANY, choices=self._get_switch_names()
         )
-        self.switch_on = wx.Button(self.top_panel, wx.ID_ANY, "Set ON")
-        self.switch_off = wx.Button(self.top_panel, wx.ID_ANY, "Set OFF")
+        self.switch_on = wx.Button(switch_pane, wx.ID_ANY, "Set ON")
+        self.switch_off = wx.Button(switch_pane, wx.ID_ANY, "Set OFF")
 
         self.monitors_label = wx.StaticText(
-            self.top_panel, wx.ID_ANY, "Monitors:"
+            monitor_pane, wx.ID_ANY, "Monitors:"
         )
         self.monitors_list = wx.ListBox(
-            self.top_panel, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
+            monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
-        self.add_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "+")
-        self.remove_monitor_btn = wx.Button(self.top_panel, wx.ID_ANY, "-")
-
-        self.reset_button = wx.Button(
-            self.top_panel, wx.ID_ANY, "↺", size=(32, 28)
-        )
+        self.add_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "+")
+        self.remove_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "-")
 
         self.console = wx.TextCtrl(
-            self.top_panel,
+            console_pane,
             wx.ID_ANY,
             "",
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL,
@@ -573,15 +579,9 @@ class Gui(wx.Frame):
 
         # Tooltips
         initial_cycles = self.spin.GetValue()
-        self.run_button.SetToolTip(
-            f"Run the simulation from scratch for {initial_cycles} cycles"
-        )
-        self.continue_button.SetToolTip(
-            f"Continue the simulation for {initial_cycles} additional cycles"
-        )
-        self.reset_button.SetToolTip(
-            "Reset the simulation to its initial state"
-        )
+        self.run_button.SetToolTip(f"Run the simulation from scratch for {initial_cycles} cycles")
+        self.continue_button.SetToolTip(f"Continue the simulation for {initial_cycles} additional cycles")
+        self.reset_button.SetToolTip("Reset the simulation to its initial state")
         self.switch_on.SetToolTip("Set the selected switch to ON (1)")
         self.switch_off.SetToolTip("Set the selected switch to OFF (0)")
         self.add_monitor_btn.SetToolTip("Add a monitor to the selected signal")
@@ -596,9 +596,7 @@ class Gui(wx.Frame):
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
         self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
-        self.last_cycles_check.Bind(
-            wx.EVT_CHECKBOX, self.on_last_cycles_change
-        )
+        self.last_cycles_check.Bind(wx.EVT_CHECKBOX, self.on_last_cycles_change)
         self.last_cycles_spin.Bind(wx.EVT_SPINCTRL, self.on_last_cycles_change)
         self.last_cycles_spin.Bind(wx.EVT_TEXT, self.on_last_cycles_change)
         self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
@@ -607,74 +605,35 @@ class Gui(wx.Frame):
         self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
         self.Bind(wx.EVT_MENU, self.on_help_menu, id=wx.ID_HELP)
-        # ── Control-panel sizer ──────────────────────────────────────────────
-        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.top_panel.SetSizer(top_sizer)
-        top_sizer.SetMinSize((-1, 170))
 
-        # Simulation box
-        sim_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Simulation")
+        # ── Sizers and Structural Layout ────────────────────────────────────
+        
+        # 1. Simulation Container
+        sim_box = wx.StaticBox(sim_pane, wx.ID_ANY, "Simulation")
         sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
 
         view_cycles_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        view_cycles_sizer.Add(
-            self.last_cycles_check, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
-        )
-        view_cycles_sizer.Add(
-            self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
-        )
-        sim_sizer.Add(
-            view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3
-        )
+        view_cycles_sizer.Add(self.last_cycles_check, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        view_cycles_sizer.Add(self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_sizer.Add(view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3)
 
-        # Buttons laid out side-by-side
         sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sim_btn_sizer.Add(
-            self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
-        )
-        sim_btn_sizer.Add(
-            self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
-        )
-        sim_btn_sizer.Add(
-            self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
-        )
-        sim_sizer.Add(
-            sim_btn_sizer,
-            0,
-            wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM,
-            3,
-        )
+        sim_btn_sizer.Add(self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_btn_sizer.Add(self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
+        sim_sizer.Add(sim_btn_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, 3)
+        sim_pane.SetSizer(sim_sizer)
 
-        # Switches box
-        switch_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Switches")
+        # 2. Switches Container
+        switch_box = wx.StaticBox(switch_pane, wx.ID_ANY, "Switches")
         switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
-
+        
         self.switch_choice.SetMinSize((90, -1))
         switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
 
-        # Monitors box
-        monitor_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Monitors")
-        monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
-        monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
-        monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
-        # Side-by-side '+' and '-' buttons
-        monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
-        monitor_sizer.Add(
-            monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
-        )
-
-        # Console box
-        console_box = wx.StaticBox(self.top_panel, wx.ID_ANY, "Console")
-        console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
-        console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
-        console_sizer.SetMinSize((350,100))
-
-        # Switch ON/OFF buttons side-by-side
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.switch_on.SetMinSize((50, -1))
         self.switch_off.SetMinSize((50, -1))
@@ -682,12 +641,55 @@ class Gui(wx.Frame):
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
         switch_sizer.SetMinSize((100, -1))
+        switch_pane.SetSizer(switch_sizer)
 
+        # 3. Monitors Container
+        monitor_box = wx.StaticBox(monitor_pane, wx.ID_ANY, "Monitors")
+        monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
+        monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
+        monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
+        
+        monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
+        monitor_sizer.Add(monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3)
+        monitor_pane.SetSizer(monitor_sizer)
 
-        top_sizer.Add(sim_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        top_sizer.Add(switch_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        top_sizer.Add(monitor_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        top_sizer.Add(console_sizer, 1, wx.EXPAND | wx.ALL, 2)
+        # 4. Console Container
+        console_box = wx.StaticBox(console_pane, wx.ID_ANY, "Console")
+        console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
+        console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
+        console_sizer.SetMinSize((350, 100))
+        console_pane.SetSizer(console_sizer)
+        
+        self.aui_manager.AddPane(sim_pane, wx.aui.AuiPaneInfo().
+                                 Name("Simulation").Caption("Simulation").
+                                 Top().Row(0).Position(0).
+                                 BestSize((210, 200)).
+                                 Gripper(True).CloseButton(False))
+                                 
+        self.aui_manager.AddPane(switch_pane, wx.aui.AuiPaneInfo().
+                                 Name("Switches").Caption("Switches").
+                                 Top().Row(0).Position(1).
+                                 BestSize((160, 200)).
+                                 Gripper(True).CloseButton(False))
+                                 
+        self.aui_manager.AddPane(monitor_pane, wx.aui.AuiPaneInfo().
+                                 Name("Monitors").Caption("Monitors").
+                                 Top().Row(0).Position(2).
+                                 BestSize((160, 200)).
+                                 Gripper(True).CloseButton(False))
+                                 
+        self.aui_manager.AddPane(console_pane, wx.aui.AuiPaneInfo().
+                                 Name("Console").Caption("Console").
+                                 Top().Row(0).Position(3).
+                                 BestSize((400, 200)).
+                                 MinSize((250, 200)).
+                                 Gripper(True).CloseButton(False))
+        
+        self.aui_manager.Update()
+        self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
+
 
         # ── Inner splitter split ─────────────────────────────────────────────
         self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
@@ -714,6 +716,11 @@ class Gui(wx.Frame):
         # Load the initial file into the viewer if one was provided
         if path:
             self._load_file_into_viewer(path)
+    def on_destroy(self, event):
+        """Safely detach and clean up the active AUI workspace layout layout engine."""
+        if hasattr(self, "aui_manager"):
+            self.aui_manager.UnInit()
+        event.Skip()
 
     # ── File viewer ──────────────────────────────────────────────────────────
 
