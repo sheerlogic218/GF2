@@ -2,12 +2,15 @@ module d_flip_flop : -> ;
  
     switch D  = 0 ;
     clock clk [2] ;
+    switch clear = 0;
+    switch set = 0;
     dtype FF ;
+	
  
     FF.CLK   <= clk ;
     FF.DATA  <= D ;
-    FF.SET   <= 0 ;
-    FF.CLEAR <= 0 ;
+    FF.SET   <= set ;
+    FF.CLEAR <= clear ;
  
     monitor FF.Q ;
     monitor FF.QBAR ;
