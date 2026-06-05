@@ -548,9 +548,14 @@ class Gui(wx.Frame):
         self.switch_label = wx.StaticText(
             switch_pane, wx.ID_ANY, "Select switch:"
         )
-        self.switch_choice = wx.Choice(
-            switch_pane, wx.ID_ANY, choices=self._get_switch_names()
+        self.switch_list = wx.ListCtrl(
+            switch_pane, wx.ID_ANY,
+            style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_HRULES,
         )
+        self.switch_list.InsertColumn(0, "Switch")
+        self.switch_list.InsertColumn(1, "Value", wx.LIST_FORMAT_CENTER)
+        self.switch_list.Bind(wx.EVT_SIZE, self._on_switch_list_size)
+        self.switch_list.Bind(wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag)
         self.switch_on = wx.Button(switch_pane, wx.ID_ANY, "Set ON")
         self.switch_off = wx.Button(switch_pane, wx.ID_ANY, "Set OFF")
 
@@ -582,6 +587,7 @@ class Gui(wx.Frame):
         self.run_button.SetToolTip(f"Run the simulation from scratch for {initial_cycles} cycles")
         self.continue_button.SetToolTip(f"Continue the simulation for {initial_cycles} additional cycles")
         self.reset_button.SetToolTip("Reset the simulation to its initial state")
+        self.switch_list.SetToolTip("Click a switch to select it, then use Set ON / Set OFF")
         self.switch_on.SetToolTip("Set the selected switch to ON (1)")
         self.switch_off.SetToolTip("Set the selected switch to OFF (0)")
         self.add_monitor_btn.SetToolTip("Add a monitor to the selected signal")
@@ -630,9 +636,7 @@ class Gui(wx.Frame):
         # 2. Switches Container
         switch_sizer = wx.BoxSizer(wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
-        
-        self.switch_choice.SetMinSize((90, -1))
-        switch_sizer.Add(self.switch_choice, 0, wx.EXPAND | wx.ALL, 5)
+        switch_sizer.Add(self.switch_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
 
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.switch_on.SetMinSize((50, -1))
@@ -724,6 +728,8 @@ class Gui(wx.Frame):
 
         # Initialise scrollbar state
         self.update_scrollbars()
+        self._switch_col_ratio = 0.5
+        self.update_switch_list()
         self.update_monitors_list()
 
         # Load the initial file into the viewer if one was provided
@@ -912,7 +918,7 @@ class Gui(wx.Frame):
         self.canvas.monitors = monitors
         self.canvas.previous_signal_traces = {}
 
-        self.switch_choice.Set(self._get_switch_names())
+        self.update_switch_list()
         self.update_monitors_list()
         self.update_scrollbars()
         self.canvas.render()
@@ -1091,17 +1097,18 @@ class Gui(wx.Frame):
 
     def on_switch_on(self, event):
         """Handle the event when the user clicks the switch on button."""
-        selection = self.switch_choice.GetSelection()
-        if selection == wx.NOT_FOUND:
+        selection = self.switch_list.GetFirstSelected()
+        if selection == -1:
             self.SetStatusText("Error: please select a switch first.")
             return
-        clean_switch_name = self.switch_choice.GetString(selection)
+        clean_switch_name = self.switch_list.GetItemText(selection, 0)
         raw_switch_name = self._switch_map.get(clean_switch_name)
         switch_id = self.names.query(raw_switch_name)
 
         if self.devices.set_switch(switch_id, self.devices.HIGH):
             self.SetStatusText(f"Switch {clean_switch_name} set ON.")
             self.log(f"Switch {clean_switch_name} set ON.")
+            self.update_switch_list()
             self.canvas.render()
         else:
             self.SetStatusText(
@@ -1110,18 +1117,19 @@ class Gui(wx.Frame):
 
     def on_switch_off(self, event):
         """Handle the event when the user clicks the switch off button."""
-        selection = self.switch_choice.GetSelection()
-        if selection == wx.NOT_FOUND:
+        selection = self.switch_list.GetFirstSelected()
+        if selection == -1:
             self.SetStatusText("Error: please select a switch first.")
             return
 
-        clean_switch_name = self.switch_choice.GetString(selection)
+        clean_switch_name = self.switch_list.GetItemText(selection, 0)
         raw_switch_name = self._switch_map.get(clean_switch_name)
         switch_id = self.names.query(raw_switch_name)
 
         if self.devices.set_switch(switch_id, self.devices.LOW):
             self.SetStatusText(f"Switch {clean_switch_name} set OFF.")
             self.log(f"Switch {clean_switch_name} set OFF.")
+            self.update_switch_list()
             self.canvas.render()
         else:
             self.SetStatusText(
@@ -1307,16 +1315,54 @@ class Gui(wx.Frame):
         dlg.ShowModal()
         dlg.Destroy()
 
-    def _get_switch_names(self):
-        """Return a list of switch device name strings from the backend."""
-        switch_ids = self.devices.find_devices(self.devices.SWITCH)
-        raw_names = [self.names.get_name_string(sid) for sid in switch_ids]
+    def update_switch_list(self):
+        """Repopulate the switch list with current names and state (0/1) from backend."""
+        sel = self.switch_list.GetFirstSelected()
+        selected_name = self.switch_list.GetItemText(sel, 0) if sel != -1 else None
 
+        self.switch_list.DeleteAllItems()
         self._switch_map = {}
-        display_names = []
-        for raw_name in raw_names:
+
+        for switch_id in self.devices.find_devices(self.devices.SWITCH):
+            raw_name = self.names.get_name_string(switch_id)
             clean_name = self.names.prettify_name(raw_name)
             self._switch_map[clean_name] = raw_name
-            display_names.append(clean_name)
+            state = self.devices.get_device(switch_id).switch_state
+            value = "1" if state == self.devices.HIGH else "0"
+            idx = self.switch_list.InsertItem(self.switch_list.GetItemCount(), clean_name)
+            self.switch_list.SetItem(idx, 1, value)
 
-        return display_names
+        wx.CallAfter(self._rescale_switch_cols)
+
+        if selected_name is not None:
+            for i in range(self.switch_list.GetItemCount()):
+                if self.switch_list.GetItemText(i, 0) == selected_name:
+                    self.switch_list.Select(i)
+                    break
+
+    def _rescale_switch_cols(self):
+        """Fill the list width exactly using the stored column ratio."""
+        total = self.switch_list.GetClientSize().width
+        if total <= 0:
+            return
+        new_w0 = max(1, int(total * self._switch_col_ratio))
+        self.switch_list.SetColumnWidth(0, new_w0)
+        self.switch_list.SetColumnWidth(1, max(1, total - new_w0))
+
+    def _on_switch_list_size(self, event):
+        """Rescale columns to fill the new width when the list is resized."""
+        event.Skip()
+        wx.CallAfter(self._rescale_switch_cols)
+
+    def _on_switch_col_drag(self, event):
+        """Update the stored ratio when the user drags the column divider."""
+        event.Skip()
+        wx.CallAfter(self._capture_switch_col_ratio)
+
+    def _capture_switch_col_ratio(self):
+        """Record the proportion the user dragged to, clamped to avoid extremes."""
+        w0 = self.switch_list.GetColumnWidth(0)
+        total = self.switch_list.GetClientSize().width
+        if total > 0:
+            self._switch_col_ratio = max(0.1, min(0.9, w0 / total))
+        wx.CallAfter(self._rescale_switch_cols)
