@@ -1,0 +1,32 @@
+module 4inputnand_bob : input1, input2, input3, input4 -> output;
+	output1 = !(input1*input2*input3*input4);
+end;
+
+module xor_bill : input1, input2 -> output;
+	output = input1^input2;
+end;
+module client_requests : -> ;
+	clock client_clk[2];
+	dtype client_dtype;
+	client_dtype.CLK <= client_clk;
+
+	switch sw1 = 0;
+	switch sw2 = 0;
+	switch sw3 = 0;
+	switch sw4 = 1;
+	switch sw5 = 0;
+	switch sw6 = 1;
+	
+	wire bob;
+	wire bill
+	instance 4inputnand_bob (sw1, sw2, sw3, sw4 -> bob);
+	instance xor_bill (sw5, sw6 -> bill);
+
+	client_dtype.DATA <= bob;
+	client_dtype.CLK <= client_clock;
+	client_dtype.SET <= bill;
+	client_dtype.CLEAR <= 0;
+
+	monitor client_dtype.Q;
+	monitor client_dtype.QBAR;
+end;
