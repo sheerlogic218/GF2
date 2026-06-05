@@ -12,8 +12,8 @@ Gui - configures the main window and all the widgets.
 import datetime
 
 import wx
-import wx.aui
 import wx.glcanvas as wxcanvas
+import wx.lib.agw.aui as agw_aui
 from OpenGL import GL, GLUT
 
 from devices import Devices
@@ -516,9 +516,9 @@ class Gui(wx.Frame):
 
         # ── Base Control Panel & AUI Management Setup ────────────────────────
         self.top_panel = wx.Panel(self.splitter)
-        self.top_panel.SetMinSize((-1, 170))
+        self.top_panel.SetMinSize((-1, 220))
         
-        self.aui_manager = wx.aui.AuiManager(self.top_panel)
+        self.aui_manager = agw_aui.AuiManager(self.top_panel)
 
         # FIX: Create the sub-pane window panels BEFORE using them as parents
         sim_pane = wx.Panel(self.top_panel)
@@ -609,8 +609,9 @@ class Gui(wx.Frame):
         # ── Sizers and Structural Layout ────────────────────────────────────
         
         # 1. Simulation Container
-        sim_box = wx.StaticBox(sim_pane, wx.ID_ANY, "Simulation")
-        sim_sizer = wx.StaticBoxSizer(sim_box, wx.VERTICAL)
+        # StaticBoxSizer dropped: the AUI caption bar now provides the "Simulation"
+        # title, so a second heading would be redundant.
+        sim_sizer = wx.BoxSizer(wx.VERTICAL)
         sim_sizer.Add(self.cycles_label, 0, wx.ALL, 5)
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
 
@@ -627,8 +628,7 @@ class Gui(wx.Frame):
         sim_pane.SetSizer(sim_sizer)
 
         # 2. Switches Container
-        switch_box = wx.StaticBox(switch_pane, wx.ID_ANY, "Switches")
-        switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
+        switch_sizer = wx.BoxSizer(wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
         
         self.switch_choice.SetMinSize((90, -1))
@@ -640,14 +640,12 @@ class Gui(wx.Frame):
         switch_btn_sizer.Add(self.switch_on, 1, wx.ALL, 5)
         switch_btn_sizer.Add(self.switch_off, 1, wx.ALL, 5)
         switch_sizer.Add(switch_btn_sizer, 0, wx.EXPAND)
-        switch_sizer.SetMinSize((100, -1))
         switch_pane.SetSizer(switch_sizer)
 
         # 3. Monitors Container
-        monitor_box = wx.StaticBox(monitor_pane, wx.ID_ANY, "Monitors")
-        monitor_sizer = wx.StaticBoxSizer(monitor_box, wx.VERTICAL)
+        monitor_sizer = wx.BoxSizer(wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
-        monitor_sizer.Add(self.monitors_list, 0, wx.EXPAND | wx.ALL, 5)
+        monitor_sizer.Add(self.monitors_list, 1, wx.EXPAND | wx.ALL, 5)
         
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
@@ -656,44 +654,59 @@ class Gui(wx.Frame):
         monitor_pane.SetSizer(monitor_sizer)
 
         # 4. Console Container
-        console_box = wx.StaticBox(console_pane, wx.ID_ANY, "Console")
-        console_sizer = wx.StaticBoxSizer(console_box, wx.VERTICAL)
+        console_sizer = wx.BoxSizer(wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
-        console_sizer.SetMinSize((350, 100))
         console_pane.SetSizer(console_sizer)
         
 
-        self.aui_manager.AddPane(sim_pane, wx.aui.AuiPaneInfo().
-                                 Name("Simulation").
-                                 ToolbarPane().Top().Row(0).Position(0).BestSize((210,150)).
-                                 Gripper(True).CloseButton(False))
-                                 
-        self.aui_manager.AddPane(switch_pane, wx.aui.AuiPaneInfo().
-                                 Name("Switches").
-                                 ToolbarPane().Top().Row(0).Position(1).BestSize((210,150)).
-                                 Gripper(True).CloseButton(False))
-                                 
-        self.aui_manager.AddPane(monitor_pane, wx.aui.AuiPaneInfo().
-                                 Name("Monitors").
-                                 ToolbarPane().Top().Row(0).Position(2).BestSize((210,150)).
-                                 Gripper(True).CloseButton(False))
-                                 
-        # We still explicitly provide a size for the Console so it stays wide, 
-        # because wx.TextCtrl does not have a natural fixed width.
-        self.aui_manager.AddPane(console_pane, wx.aui.AuiPaneInfo().
-                                 Name("Console").
-                                 ToolbarPane().Top().Row(0).Position(3).
-                                 MinSize((200, 150)).
-                                 BestSize((300, 150)).
-                                 Gripper(True).CloseButton(False))
+        # Standard (non-toolbar) AUI panes with visible captions.
+        #
+        # Why Floatable(True): wxAUI's drag-to-reorder mechanism briefly lifts
+        # a pane into a floating state before re-docking it at the new position.
+        # With Floatable(False) that transition is blocked and swapping is
+        # impossible, so Floatable(True) is required for position swapping to
+        # work. LeftDockable/RightDockable/BottomDockable remain False so the
+        # pane can only be re-docked back to the top toolbar row.
+        #
+        # The caption bar also doubles as the resize drag target between panes.
+        _resizable_pane = lambda pos, caption: (
+            agw_aui.AuiPaneInfo()
+            .Caption(caption)
+            .Top().Layer(0).Row(0).Position(pos)
+            .Resizable(True)
+            .CloseButton(False)
+            .Floatable(True)
+            .TopDockable(True)
+            .LeftDockable(False)
+            .RightDockable(False)
+            .BottomDockable(False)
+        )
+
+        self.aui_manager.AddPane(sim_pane,
+                                 _resizable_pane(0, "Simulation").Name("Simulation").
+                                 MinSize((120, 155)).BestSize((230, 195)))
+
+        self.aui_manager.AddPane(switch_pane,
+                                 _resizable_pane(1, "Switches").Name("Switches").
+                                 MinSize((120, 155)).BestSize((230, 195)))
+
+        self.aui_manager.AddPane(monitor_pane,
+                                 _resizable_pane(2, "Monitors").Name("Monitors").
+                                 MinSize((120, 155)).BestSize((230, 195)))
+
+        # Console gets a wider BestSize because wx.TextCtrl has no natural
+        # fixed width of its own.
+        self.aui_manager.AddPane(console_pane,
+                                 _resizable_pane(3, "Console").Name("Console").
+                                 MinSize((200, 155)).BestSize((380, 195)))
         
         self.aui_manager.Update()
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
                     
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
-        self.splitter.SetMinimumPaneSize(165)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 225)
+        self.splitter.SetMinimumPaneSize(220)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
         left_sizer = wx.BoxSizer(wx.VERTICAL)
