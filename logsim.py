@@ -12,6 +12,7 @@ Graphical user interface: logsim.py <file path>
 """
 
 import getopt
+import os
 import sys
 
 import wx
@@ -82,6 +83,7 @@ def main(arg_list):
 
                 # Initialise an instance of the gui.Gui() class
                 app = wx.App()
+                _app_locale = _setup_locale(app)  # noqa: F841 – keep alive
                 gui = Gui(
                     "Logic Simulator", path, names, devices, network, monitors
                 )
@@ -95,6 +97,29 @@ def main(arg_list):
             print(e)
             for error in parser.errors[:-1]:
                 print(error)
+
+
+def _setup_locale(app: wx.App) -> wx.Locale:
+    """Initialise wx.Locale for i18n.
+
+    Language selection (in order of priority):
+      1. LANG / LANGUAGE environment variable (e.g. LANG=fr_FR)
+      2. Default system language (English)
+
+    To run in French on any platform:
+        LANG=fr_FR python logsim.py <file>          # Linux/macOS
+        $env:LANG="fr_FR"; python logsim.py <file>  # PowerShell
+    """
+    locale_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale")
+    wx.Locale.AddCatalogLookupPathPrefix(locale_dir)
+
+    lang_str = os.environ.get("LANG", os.environ.get("LANGUAGE", "")).lower()
+    wx_lang = wx.LANGUAGE_FRENCH if lang_str.startswith("fr") else wx.LANGUAGE_DEFAULT
+
+    locale = wx.Locale()
+    locale.Init(wx_lang, wx.LOCALE_DONT_LOAD_DEFAULT)
+    locale.AddCatalog("logsim")
+    return locale  # caller must keep a reference to prevent GC
 
 
 if __name__ == "__main__":
