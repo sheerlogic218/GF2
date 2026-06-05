@@ -516,7 +516,7 @@ class Gui(wx.Frame):
 
         # ── Base Control Panel & AUI Management Setup ────────────────────────
         self.top_panel = wx.Panel(self.splitter)
-        self.top_panel.SetMinSize((-1, 220))
+        #self.top_panel.SetMinSize((-1, 150))
         
         self.aui_manager = agw_aui.AuiManager(self.top_panel)
 
@@ -705,8 +705,8 @@ class Gui(wx.Frame):
                     
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 225)
-        self.splitter.SetMinimumPaneSize(220)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
+        self.splitter.SetMinimumPaneSize(150)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
         left_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -716,7 +716,7 @@ class Gui(wx.Frame):
         # ── Frame sizer wraps the outer splitter ─────────────────────────────
         main_sizer = wx.BoxSizer(wx.VERTICAL)
         main_sizer.Add(self.outer_splitter, 1, wx.EXPAND)
-        self.SetSizeHints(850, 425)
+        self.SetSizeHints(850, 400)  # minimum size to prevent extreme resizing
         self.SetSizer(main_sizer)
 
         self.CreateStatusBar()
