@@ -935,7 +935,7 @@ class Gui(wx.Frame):
         # Margin 1: error indicator dots (14 px)
         self._file_text.SetMarginType(1, wx.stc.STC_MARGIN_SYMBOL)
         self._file_text.SetMarginWidth(1, 14)
-        self._file_text.SetMarginSensitive(1, False)
+        self._file_text.SetMarginSensitive(1, True)
         self._file_text.SetMarginMask(1, 0b11)  # show markers 0 and 1
         self._file_text.SetMarginWidth(2, 0)
 
@@ -947,6 +947,15 @@ class Gui(wx.Frame):
         self._file_text.MarkerDefine(
             1, wx.stc.STC_MARK_BACKGROUND, wx.Colour(80, 20, 20), wx.Colour(70, 18, 18)
         )
+
+        # Style 40: red italic text used for inline error annotations
+        self._file_text.StyleSetForeground(40, wx.Colour(255, 110, 110))
+        self._file_text.StyleSetBackground(40, wx.Colour(50, 12, 12))
+        self._file_text.StyleSetItalic(40, True)
+        self._file_text.AnnotationSetVisible(2)  # 2 = STC_ANNOTATION_BOXED
+
+        self._error_map = {}  # 0-indexed line → error string
+        self._file_text.Bind(wx.stc.EVT_STC_MARGINCLICK, self._on_error_margin_click)
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
@@ -966,6 +975,8 @@ class Gui(wx.Frame):
             self._file_text.SetText(content)
             self._file_text.MarkerDeleteAll(0)
             self._file_text.MarkerDeleteAll(1)
+            self._file_text.AnnotationClearAll()
+            self._error_map = {}
             filename = path.split("/")[-1].split("\\")[-1]
             self._viewer_title.SetLabel(_("File Viewer") + f" — {filename}")
             self._viewer_title.SetToolTip(path)
@@ -1039,20 +1050,45 @@ class Gui(wx.Frame):
             return False
 
     def _highlight_errors(self, errors):
-        """Add a red circle and line background for each error line in the viewer."""
+        """Mark error lines with a red dot, background, and collapsible annotation."""
         self._file_text.MarkerDeleteAll(0)
         self._file_text.MarkerDeleteAll(1)
+        self._file_text.AnnotationClearAll()
+        self._error_map = {}
         first_line = None
         for err in errors:
             m = re.search(r'at\s+(?:line\s+)?(\d+)', err)
             if m:
                 ln = int(m.group(1)) - 1  # STC lines are 0-indexed
+                # Accumulate multiple errors on the same line
+                if ln in self._error_map:
+                    self._error_map[ln] += "\n  " + err
+                else:
+                    self._error_map[ln] = err
                 self._file_text.MarkerAdd(ln, 0)
                 self._file_text.MarkerAdd(ln, 1)
                 if first_line is None:
                     first_line = ln
+        # Show all annotations immediately; clicking the dot toggles them
+        for ln, msg in self._error_map.items():
+            self._file_text.AnnotationSetText(ln, "  " + msg)
+            self._file_text.AnnotationSetStyle(ln, 40)
         if first_line is not None:
             self._file_text.GotoLine(first_line)
+
+    def _on_error_margin_click(self, event):
+        """Toggle the error annotation for the clicked line."""
+        if event.GetMargin() != 1:
+            event.Skip()
+            return
+        ln = self._file_text.LineFromPosition(event.GetPosition())
+        if ln not in self._error_map:
+            return
+        if self._file_text.AnnotationGetText(ln):
+            self._file_text.AnnotationSetText(ln, "")
+        else:
+            self._file_text.AnnotationSetText(ln, "  " + self._error_map[ln])
+            self._file_text.AnnotationSetStyle(ln, 40)
 
     def _on_implement_viewer(self, event):
         """Use the file currently shown in the viewer as the active circuit."""
@@ -1090,6 +1126,8 @@ class Gui(wx.Frame):
 
         self._file_text.MarkerDeleteAll(0)
         self._file_text.MarkerDeleteAll(1)
+        self._file_text.AnnotationClearAll()
+        self._error_map = {}
         self.update_switch_list()
         self.update_monitors_list()
         self.update_scrollbars()
