@@ -662,34 +662,34 @@ class Gui(wx.Frame):
         console_sizer.SetMinSize((350, 100))
         console_pane.SetSizer(console_sizer)
         
+
         self.aui_manager.AddPane(sim_pane, wx.aui.AuiPaneInfo().
-                                 Name("Simulation").Caption("Simulation").
-                                 Top().Row(0).Position(0).
-                                 BestSize((210, 200)).
+                                 Name("Simulation").
+                                 ToolbarPane().Top().Row(0).Position(0).BestSize((210,150)).
                                  Gripper(True).CloseButton(False))
                                  
         self.aui_manager.AddPane(switch_pane, wx.aui.AuiPaneInfo().
-                                 Name("Switches").Caption("Switches").
-                                 Top().Row(0).Position(1).
-                                 BestSize((160, 200)).
+                                 Name("Switches").
+                                 ToolbarPane().Top().Row(0).Position(1).BestSize((210,150)).
                                  Gripper(True).CloseButton(False))
                                  
         self.aui_manager.AddPane(monitor_pane, wx.aui.AuiPaneInfo().
-                                 Name("Monitors").Caption("Monitors").
-                                 Top().Row(0).Position(2).
-                                 BestSize((160, 200)).
+                                 Name("Monitors").
+                                 ToolbarPane().Top().Row(0).Position(2).BestSize((210,150)).
                                  Gripper(True).CloseButton(False))
                                  
+        # We still explicitly provide a size for the Console so it stays wide, 
+        # because wx.TextCtrl does not have a natural fixed width.
         self.aui_manager.AddPane(console_pane, wx.aui.AuiPaneInfo().
-                                 Name("Console").Caption("Console").
-                                 Top().Row(0).Position(3).
-                                 BestSize((400, 200)).
-                                 MinSize((250, 200)).
+                                 Name("Console").
+                                 ToolbarPane().Top().Row(0).Position(3).
+                                 MinSize((200, 150)).
+                                 BestSize((300, 150)).
                                  Gripper(True).CloseButton(False))
         
         self.aui_manager.Update()
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
-
+                    
 
         # ── Inner splitter split ─────────────────────────────────────────────
         self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
