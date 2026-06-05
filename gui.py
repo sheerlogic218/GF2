@@ -898,6 +898,9 @@ class Gui(wx.Frame):
             )
             self.SetStatusText("Implement failed: parse errors in file.")
             self.log("Implement failed: parse errors in " + self._viewer_path)
+            for e in parser.errors:
+                # TODO: add coordinates to text box.
+                self.log(e)
             return
 
         self.names = names
