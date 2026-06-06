@@ -13,11 +13,12 @@ import datetime
 import math
 import re
 
+import numpy as np
 import wx
 import wx.glcanvas as wxcanvas
 import wx.lib.agw.aui as agw_aui
 import wx.stc
-from OpenGL import GL, GLUT
+from OpenGL import GL, GLU, GLUT
 
 from devices import Devices
 from monitors import Monitors
@@ -566,6 +567,294 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         event.Skip()
 
 
+class MyGL3DCanvas(wxcanvas.GLCanvas):
+    """3D OpenGL canvas – renders each monitor trace as a lane of solid cuboids."""
+
+    _TRACK_COLORS = [
+        (0.20, 0.85, 0.45),
+        (0.35, 0.65, 1.00),
+        (1.00, 0.55, 0.20),
+        (0.90, 0.30, 0.85),
+        (0.30, 0.90, 0.90),
+        (1.00, 0.90, 0.20),
+        (0.90, 0.40, 0.40),
+        (0.55, 0.90, 0.30),
+    ]
+
+    def __init__(self, parent, devices, monitors):
+        super().__init__(
+            parent, -1,
+            attribList=[wxcanvas.WX_GL_RGBA, wxcanvas.WX_GL_DOUBLEBUFFER,
+                        wxcanvas.WX_GL_DEPTH_SIZE, 16, 0],
+        )
+        GLUT.glutInit()
+        self.init = False
+        self._initial_rotate_done = False
+        self.context = wxcanvas.GLContext(self)
+
+        self.devices = devices
+        self.monitors = monitors
+        self.visible_cycles = None
+        self.previous_signal_traces = {}
+
+        self.no_ambient   = [0.0, 0.0, 0.0, 1.0]
+        self.dim_diffuse  = [0.5, 0.5, 0.5, 1.0]
+        self.med_diffuse  = [0.75, 0.75, 0.75, 1.0]
+        self.no_specular  = [0.0, 0.0, 0.0, 1.0]
+        self.top_right    = [1.0, 1.0, 1.0, 0.0]
+        self.straight_on  = [0.0, 0.0, 1.0, 0.0]
+        self.mat_specular  = [0.5, 0.5, 0.5, 1.0]
+        self.mat_shininess = [50.0]
+        self.mat_diffuse   = [0.0, 0.0, 0.0, 1.0]
+
+        self.pan_x        = 0.0
+        self.pan_y        = 0.0
+        self.zoom         = 1.0
+        self.depth_offset = 1000
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+        self.scene_rotate = np.identity(4, 'f')
+
+        self.Bind(wx.EVT_PAINT,        self.on_paint)
+        self.Bind(wx.EVT_SIZE,         self.on_size)
+        self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
+
+    def init_gl(self):
+        """Configure the OpenGL context for 3D perspective rendering."""
+        size = self.GetClientSize()
+        self.SetCurrent(self.context)
+        GL.glViewport(0, 0, max(1, size.width), max(1, size.height))
+
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glLoadIdentity()
+        GLU.gluPerspective(45, max(1, size.width) / max(1, size.height), 10, 10000)
+
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glLoadIdentity()
+
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_AMBIENT,  self.no_ambient)
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE,  self.med_diffuse)
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR, self.no_specular)
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_POSITION, self.top_right)
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_AMBIENT,  self.no_ambient)
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_DIFFUSE,  self.dim_diffuse)
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_SPECULAR, self.no_specular)
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_POSITION, self.straight_on)
+
+        GL.glMaterialfv(GL.GL_FRONT, GL.GL_SPECULAR,            self.mat_specular)
+        GL.glMaterialfv(GL.GL_FRONT, GL.GL_SHININESS,           self.mat_shininess)
+        GL.glMaterialfv(GL.GL_FRONT, GL.GL_AMBIENT_AND_DIFFUSE, self.mat_diffuse)
+        GL.glColorMaterial(GL.GL_FRONT, GL.GL_AMBIENT_AND_DIFFUSE)
+
+        GL.glClearColor(0.05, 0.07, 0.12, 0.0)
+        GL.glDepthFunc(GL.GL_LEQUAL)
+        GL.glShadeModel(GL.GL_SMOOTH)
+        GL.glDrawBuffer(GL.GL_BACK)
+        GL.glCullFace(GL.GL_BACK)
+        GL.glEnable(GL.GL_COLOR_MATERIAL)
+        GL.glEnable(GL.GL_CULL_FACE)
+        GL.glEnable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_LIGHTING)
+        GL.glEnable(GL.GL_LIGHT0)
+        GL.glEnable(GL.GL_LIGHT1)
+        GL.glEnable(GL.GL_NORMALIZE)
+
+        # Set a pleasant default viewing angle on the first call
+        if not self._initial_rotate_done:
+            GL.glRotatef(25, 1, 0, 0)
+            GL.glRotatef(-20, 0, 1, 0)
+            GL.glGetFloatv(GL.GL_MODELVIEW_MATRIX, self.scene_rotate)
+            self._initial_rotate_done = True
+            GL.glLoadIdentity()
+
+        GL.glTranslatef(0.0, 0.0, -self.depth_offset)
+        GL.glTranslatef(self.pan_x, self.pan_y, 0.0)
+        GL.glMultMatrixf(self.scene_rotate)
+        GL.glScalef(self.zoom, self.zoom, self.zoom)
+
+    def render(self):
+        """Render each monitor as a row of 3D cuboids along the time axis."""
+        self.SetCurrent(self.context)
+        if not self.init:
+            self.init_gl()
+            self.init = True
+
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+
+        monitors_dict = self.monitors.monitors_dict
+        if not monitors_dict:
+            GL.glFlush()
+            self.SwapBuffers()
+            return
+
+        signal_items = list(monitors_dict.items())
+        num_signals  = len(signal_items)
+
+        visible = {}
+        for key, sig_list in signal_items:
+            if self.visible_cycles is None:
+                visible[key] = sig_list
+            else:
+                prev = self.previous_signal_traces.get(key, [])
+                visible[key] = (list(prev) + list(sig_list))[-self.visible_cycles:]
+
+        max_cycles = max((len(v) for v in visible.values()), default=0)
+        if max_cycles == 0:
+            GL.glFlush()
+            self.SwapBuffers()
+            return
+
+        CYCLE_W     = 18.0
+        LANE_D      = 65.0
+        TRACE_DEPTH = 22.0
+        HIGH_H      = 22.0
+        LOW_H       =  3.0
+
+        for k, (key, _) in enumerate(signal_items):
+            device_id, output_id = key
+            sig_values = visible[key]
+            z_center   = (k - (num_signals - 1) / 2.0) * LANE_D
+            color      = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
+            GL.glColor3f(*color)
+
+            monitor_name = self.devices.get_signal_name(device_id, output_id)
+            clean_name   = self.devices.names.prettify_name(monitor_name)
+            x_label = -(max_cycles / 2.0 + 2.0) * CYCLE_W
+            self.render_text(clean_name, x_label, 5, z_center)
+
+            for i, state in enumerate(sig_values):
+                x_c = (i - max_cycles / 2.0 + 0.5) * CYCLE_W
+                if state == self.devices.HIGH:
+                    h = HIGH_H
+                elif state == self.devices.LOW:
+                    h = LOW_H
+                elif state in (self.devices.RISING, self.devices.FALLING):
+                    h = (HIGH_H + LOW_H) / 2
+                else:
+                    continue
+                self.draw_cuboid(x_c, z_center, CYCLE_W / 2 - 0.5, TRACE_DEPTH / 2, h)
+
+        # Floor grid
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glColor3f(0.20, 0.25, 0.35)
+        GL.glLineWidth(1.0)
+        x_lo = -(max_cycles / 2.0) * CYCLE_W
+        x_hi =  (max_cycles / 2.0) * CYCLE_W
+        z_lo = -(num_signals / 2.0) * LANE_D
+        z_hi =  (num_signals / 2.0) * LANE_D
+        floor_y = -6.5
+        GL.glBegin(GL.GL_LINES)
+        for i in range(max_cycles + 1):
+            x = x_lo + i * CYCLE_W
+            GL.glVertex3f(x, floor_y, z_lo)
+            GL.glVertex3f(x, floor_y, z_hi)
+        for k2 in range(num_signals + 1):
+            z = (k2 - num_signals / 2.0) * LANE_D
+            GL.glVertex3f(x_lo, floor_y, z)
+            GL.glVertex3f(x_hi, floor_y, z)
+        GL.glEnd()
+        GL.glEnable(GL.GL_LIGHTING)
+
+        GL.glFlush()
+        self.SwapBuffers()
+
+    def draw_cuboid(self, x_pos, z_pos, half_width, half_depth, height):
+        """Draw a solid cuboid (base at y=−6, top at y=−6+height)."""
+        GL.glBegin(GL.GL_QUADS)
+        GL.glNormal3f(0, -1, 0)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos + half_depth)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos + half_depth)
+        GL.glNormal3f(0, 1, 0)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos + half_depth)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos + half_depth)
+        GL.glNormal3f(-1, 0, 0)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos - half_depth)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos + half_depth)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos + half_depth)
+        GL.glNormal3f(1, 0, 0)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos + half_depth)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos + half_depth)
+        GL.glNormal3f(0, 0, -1)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos - half_depth)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos - half_depth)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos - half_depth)
+        GL.glNormal3f(0, 0, 1)
+        GL.glVertex3f(x_pos - half_width, -6 + height, z_pos + half_depth)
+        GL.glVertex3f(x_pos - half_width, -6,          z_pos + half_depth)
+        GL.glVertex3f(x_pos + half_width, -6,          z_pos + half_depth)
+        GL.glVertex3f(x_pos + half_width, -6 + height, z_pos + half_depth)
+        GL.glEnd()
+
+    def on_paint(self, event):
+        self.SetCurrent(self.context)
+        if not self.init:
+            self.init_gl()
+            self.init = True
+        self.render()
+
+    def on_size(self, event):
+        self.init = False
+        self.Refresh()
+
+    def on_mouse(self, event):
+        """Left-drag rotates; right-drag pans; scroll wheel zooms."""
+        self.SetCurrent(self.context)
+
+        if event.ButtonDown():
+            self.last_mouse_x = event.GetX()
+            self.last_mouse_y = event.GetY()
+
+        if event.Dragging():
+            GL.glMatrixMode(GL.GL_MODELVIEW)
+            GL.glLoadIdentity()
+            x = event.GetX() - self.last_mouse_x
+            y = event.GetY() - self.last_mouse_y
+            if event.LeftIsDown():
+                GL.glRotatef(math.sqrt(x * x + y * y), y, x, 0)
+            if event.MiddleIsDown():
+                GL.glRotatef(x + y, 0, 0, 1)
+            if event.RightIsDown():
+                self.pan_x += x
+                self.pan_y -= y
+            GL.glMultMatrixf(self.scene_rotate)
+            GL.glGetFloatv(GL.GL_MODELVIEW_MATRIX, self.scene_rotate)
+            self.last_mouse_x = event.GetX()
+            self.last_mouse_y = event.GetY()
+            self.init = False
+
+        wheel = event.GetWheelRotation()
+        if wheel < 0:
+            self.zoom *= (1.0 + wheel / (20 * event.GetWheelDelta()))
+            self.zoom = max(0.05, self.zoom)
+            self.init = False
+        if wheel > 0:
+            self.zoom /= (1.0 - wheel / (20 * event.GetWheelDelta()))
+            self.init = False
+
+        self.Refresh()
+
+    def render_text(self, text, x_pos, y_pos, z_pos):
+        """Render a GLUT bitmap string at a 3D world position."""
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glRasterPos3f(x_pos, y_pos, z_pos)
+        font = GLUT.GLUT_BITMAP_HELVETICA_12
+        for ch in text:
+            if ch == '\n':
+                y_pos -= 20
+                GL.glRasterPos3f(x_pos, y_pos, z_pos)
+            else:
+                GLUT.glutBitmapCharacter(font, ord(ch))
+        GL.glEnable(GL.GL_LIGHTING)
+
+
 class Gui(wx.Frame):
     """Configure the main window and all the widgets."""
 
@@ -631,8 +920,16 @@ class Gui(wx.Frame):
         # Container panel for canvas and scrollbars
         self.canvas_panel = wx.Panel(self.splitter)
 
-        # Canvas for drawing signals
-        self.canvas = MyGLCanvas(self.canvas_panel, devices, monitors)
+        # Host panel holds 2D and 3D canvases; only one shown at a time
+        self.canvas_host = wx.Panel(self.canvas_panel)
+        self.canvas = MyGLCanvas(self.canvas_host, devices, monitors)
+        self.canvas3d = MyGL3DCanvas(self.canvas_host, devices, monitors)
+        self.canvas3d.Hide()
+        self._is_3d = False
+        _host_sizer = wx.BoxSizer(wx.VERTICAL)
+        _host_sizer.Add(self.canvas, 1, wx.EXPAND)
+        _host_sizer.Add(self.canvas3d, 1, wx.EXPAND)
+        self.canvas_host.SetSizer(_host_sizer)
 
         # Scrollbars
         self.v_scroll = wx.ScrollBar(self.canvas_panel, style=wx.SB_VERTICAL)
@@ -665,9 +962,18 @@ class Gui(wx.Frame):
             self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
         )
 
+        self._view_3d_btn = wx.ToggleButton(
+            self.canvas_panel, label="3D", size=(38, 26)
+        )
+        self._view_3d_btn.SetToolTip(_("Switch to 3D signal view"))
+        self._view_3d_btn.Bind(wx.EVT_TOGGLEBUTTON, self._on_toggle_3d)
+        x_zoom_row.Add(
+            self._view_3d_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT, 6
+        )
+
         # Arrange canvas, scrollbars, and zoom slider
         canvas_sizer = wx.GridBagSizer(0, 0)
-        canvas_sizer.Add(self.canvas, pos=(0, 0), flag=wx.EXPAND)
+        canvas_sizer.Add(self.canvas_host, pos=(0, 0), flag=wx.EXPAND)
         canvas_sizer.Add(self.v_scroll, pos=(0, 1), flag=wx.EXPAND)
         canvas_sizer.Add(self.h_scroll, pos=(1, 0), flag=wx.EXPAND)
         canvas_sizer.Add(x_zoom_row, pos=(2, 0), flag=wx.EXPAND)
@@ -1219,6 +1525,9 @@ class Gui(wx.Frame):
         self.canvas.devices = devices
         self.canvas.monitors = monitors
         self.canvas.previous_signal_traces = {}
+        self.canvas3d.devices = devices
+        self.canvas3d.monitors = monitors
+        self.canvas3d.previous_signal_traces = {}
 
         self._file_text.MarkerDeleteAll(0)
         self._file_text.MarkerDeleteAll(1)
@@ -1227,7 +1536,7 @@ class Gui(wx.Frame):
         self.update_switch_list()
         self.update_monitors_list()
         self.update_scrollbars()
-        self.canvas.render()
+        self._render_canvas()
         self.SetTitle("Logic Simulator - " + self._viewer_path)
         self.SetStatusText(_("Implemented: %s") % self._viewer_path)
         self.log(_("Implemented file: %s") % self._viewer_path)
@@ -1235,6 +1544,33 @@ class Gui(wx.Frame):
     def _on_close_viewer(self, event):
         """Handle the X button inside the viewer panel."""
         self._hide_viewer()
+
+    # ── 2D / 3D canvas toggle ────────────────────────────────────────────────
+
+    def _render_canvas(self):
+        """Render whichever canvas is currently active."""
+        if self._is_3d:
+            self.canvas3d.render()
+        else:
+            self.canvas.render()
+
+    def _on_toggle_3d(self, event):
+        """Switch between the 2D and 3D signal views."""
+        self._is_3d = event.GetInt() == 1
+        if self._is_3d:
+            self.canvas.Hide()
+            self.canvas3d.Show()
+            self._view_3d_btn.SetLabel("2D")
+            self._view_3d_btn.SetToolTip(_("Switch back to 2D signal view"))
+            self.SetStatusText(_("3D view enabled — drag to rotate, scroll to zoom."))
+        else:
+            self.canvas3d.Hide()
+            self.canvas.Show()
+            self._view_3d_btn.SetLabel("3D")
+            self._view_3d_btn.SetToolTip(_("Switch to 3D signal view"))
+            self.SetStatusText(_("2D view enabled."))
+        self.canvas_host.Layout()
+        self._render_canvas()
 
     # ── Menu ─────────────────────────────────────────────────────────────────
 
@@ -1302,11 +1638,13 @@ class Gui(wx.Frame):
 
     def archive_current_traces(self):
         """Store current monitor traces for the next cycle-windowed run view."""
-        self.canvas.previous_signal_traces = {
+        archived = {
             monitor: list(signal_list)
             for monitor, signal_list in self.monitors.monitors_dict.items()
             if signal_list
         }
+        self.canvas.previous_signal_traces = archived
+        self.canvas3d.previous_signal_traces = archived
 
     def update_monitors_list(self):
         """Refresh the monitor list from backend monitor state."""
@@ -1340,12 +1678,14 @@ class Gui(wx.Frame):
             visible_cycles = self.last_cycles_spin.GetValue()
             self.last_cycles_spin.Enable(True)
             self.canvas.visible_cycles = visible_cycles
+            self.canvas3d.visible_cycles = visible_cycles
             self.SetStatusText(_("Showing last %d cycles.") % visible_cycles)
         else:
             self.last_cycles_spin.Enable(False)
             self.canvas.visible_cycles = None
+            self.canvas3d.visible_cycles = None
             self.SetStatusText(_("Showing all recorded cycles."))
-        self.canvas.render()
+        self._render_canvas()
 
     def on_spin(self, event):
         """Handle the event when the user changes the spin control value."""
@@ -1362,7 +1702,7 @@ class Gui(wx.Frame):
             _("Continue the simulation for %d additional cycles") % spin_value
         )
 
-        self.canvas.render()
+        self._render_canvas()
         self.log(_("New spin control value: %d") % spin_value)
 
     def on_run_button(self, event):
@@ -1379,7 +1719,7 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Completed %d cycles.") % cycles)
             self.log(_("Completed %d cycles.") % cycles)
         self.update_monitors_list()
-        self.canvas.render()
+        self._render_canvas()
 
     def on_continue_button(self, event):
         """Handle the event when the user clicks the continue button."""
@@ -1397,7 +1737,7 @@ class Gui(wx.Frame):
             )
             self.log(_("Completed %d total cycles.") % self.cycles_completed)
         self.update_monitors_list()
-        self.canvas.render()
+        self._render_canvas()
 
     def on_switch_on(self, event):
         """Handle the event when the user clicks the switch on button."""
@@ -1413,7 +1753,7 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Switch %s set ON.") % clean_switch_name)
             self.log(_("Switch %s set ON.") % clean_switch_name)
             self.update_switch_list()
-            self.canvas.render()
+            self._render_canvas()
         else:
             self.SetStatusText(
                 _("Error: could not set switch %s.") % clean_switch_name
@@ -1434,7 +1774,7 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Switch %s set OFF.") % clean_switch_name)
             self.log(_("Switch %s set OFF.") % clean_switch_name)
             self.update_switch_list()
-            self.canvas.render()
+            self._render_canvas()
         else:
             self.SetStatusText(
                 _("Error: could not set switch %s.") % clean_switch_name
@@ -1468,7 +1808,7 @@ class Gui(wx.Frame):
                 _("Error: could not add monitor %s") % signal_name
             )
         self.update_monitors_list()
-        self.canvas.render()
+        self._render_canvas()
 
     def on_remove_monitor(self, event):
         """Handle the event when the user clicks the remove monitor button."""
@@ -1493,7 +1833,7 @@ class Gui(wx.Frame):
                 _("Error: monitor is not active: %s") % signal_name
             )
         self.update_monitors_list()
-        self.canvas.render()
+        self._render_canvas()
 
     def on_monitor_reorder(self, src, dst):
         """Reorder monitors_dict when the user drag-drops a canvas waveform row."""
@@ -1507,16 +1847,17 @@ class Gui(wx.Frame):
         for key in keys:
             self.monitors.monitors_dict[key] = old_dict[key]
         self.update_monitors_list()
-        self.canvas.render()
+        self._render_canvas()
 
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
         self.cycles_completed = 0
         self.monitors.reset_monitors()
         self.canvas.previous_signal_traces = {}
+        self.canvas3d.previous_signal_traces = {}
         self.devices.cold_startup()
         self.SetStatusText(_("Simulation reset."))
-        self.canvas.render()
+        self._render_canvas()
         self.log(_("Simulation reset."))
 
     def log(self, message):
