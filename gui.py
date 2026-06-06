@@ -100,7 +100,7 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         visible_height = height / zoom_factor
 
         # Content width expands with x_zoom; allow panning to reach the far edge
-        x_zoom = getattr(self, 'x_zoom', 1.0)
+        x_zoom = getattr(self, "x_zoom", 1.0)
         content_right = 80 + (width - 120) * x_zoom + 40
         max_pan_x = max(0.0, content_right - visible_width)
         max_pan_y = max(0.0, height - visible_height)
@@ -132,7 +132,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         canvas_width, canvas_height = size.width, size.height
         box_x_start, box_x_end = 80, canvas_width - 40
         box_y_bot, box_y_top = 20, canvas_height - 20
-        actual_box_x_end = box_x_start + (box_x_end - box_x_start) * self.x_zoom
+        actual_box_x_end = (
+            box_x_start + (box_x_end - box_x_start) * self.x_zoom
+        )
 
         # 2. Draw outer border layout box
         GL.glColor3f(0.3, 0.4, 0.5)
@@ -176,8 +178,11 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             label_y = canvas_height - 8
             raw_step = math.ceil(28 / cycle_width) if cycle_width > 0 else 1
             label_step = next(
-                (n for n in [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000]
-                 if n >= raw_step),
+                (
+                    n
+                    for n in [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000]
+                    if n >= raw_step
+                ),
                 raw_step,
             )
             for i in range(label_step, num_cycles + 1, label_step):
@@ -263,8 +268,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glEnd()
 
         # Draw drag-to-reorder insertion indicator
-        if (self._drag_monitor_src is not None
-                and self._drag_monitor_dst != self._drag_monitor_src):
+        if (
+            self._drag_monitor_src is not None
+            and self._drag_monitor_dst != self._drag_monitor_src
+        ):
             dst = self._drag_monitor_dst
             src = self._drag_monitor_src
             indicator_y = (
@@ -426,9 +433,11 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         elif event.Moving():
             mx, my = event.GetPosition()
-            if (len(self.monitors.monitors_dict) > 0
-                    and self._in_label_area(mx)
-                    and self._get_monitor_row(mx, my) >= 0):
+            if (
+                len(self.monitors.monitors_dict) > 0
+                and self._in_label_area(mx)
+                and self._get_monitor_row(mx, my) >= 0
+            ):
                 self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
             else:
                 self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
@@ -599,7 +608,9 @@ class Gui(wx.Frame):
         self.outer_splitter = wx.SplitterWindow(
             self, style=wx.SP_LIVE_UPDATE | wx.SP_NO_XP_THEME
         )
-        self.outer_splitter.SetSashGravity(0.0)  # allocate more space to left pane
+        self.outer_splitter.SetSashGravity(
+            0.0
+        )  # allocate more space to left pane
         self.outer_splitter.SetMinimumPaneSize(200)
 
         # Left pane wraps the existing horizontal (controls / canvas) layout
@@ -632,7 +643,10 @@ class Gui(wx.Frame):
 
         # X-axis zoom slider
         self.x_zoom_slider = wx.Slider(
-            self.canvas_panel, value=1, minValue=1, maxValue=30,
+            self.canvas_panel,
+            value=1,
+            minValue=1,
+            maxValue=30,
             style=wx.SL_HORIZONTAL,
         )
         self.x_zoom_value_label = wx.StaticText(self.canvas_panel, label="1×")
@@ -640,10 +654,16 @@ class Gui(wx.Frame):
         x_zoom_row = wx.BoxSizer(wx.HORIZONTAL)
         x_zoom_row.Add(
             wx.StaticText(self.canvas_panel, label=_("X Zoom:")),
-            0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6,
+            0,
+            wx.ALIGN_CENTER_VERTICAL | wx.LEFT,
+            6,
         )
-        x_zoom_row.Add(self.x_zoom_slider, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 4)
-        x_zoom_row.Add(self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        x_zoom_row.Add(
+            self.x_zoom_slider, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 4
+        )
+        x_zoom_row.Add(
+            self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
+        )
 
         # Arrange canvas, scrollbars, and zoom slider
         canvas_sizer = wx.GridBagSizer(0, 0)
@@ -657,14 +677,14 @@ class Gui(wx.Frame):
 
         # ── Base Control Panel & AUI Management Setup ────────────────────────
         self.top_panel = wx.Panel(self.splitter)
-        #self.top_panel.SetMinSize((-1, 150))
-        
+        # self.top_panel.SetMinSize((-1, 150))
+
         self.aui_manager = agw_aui.AuiManager(self.top_panel)
 
         # FIX: Create the sub-pane window panels BEFORE using them as parents
         sim_pane = wx.Panel(self.top_panel)
         switch_pane = wx.Panel(self.top_panel)
-        monitor_pane = wx.Panel(self.top_panel)        
+        monitor_pane = wx.Panel(self.top_panel)
         console_pane = wx.Panel(self.top_panel)
 
         # ── Widgets (Now attached to their correct, existing parents) ─────────
@@ -672,9 +692,7 @@ class Gui(wx.Frame):
         self.spin = wx.SpinCtrl(
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
         )
-        self.run_button = wx.Button(
-            sim_pane, wx.ID_ANY, "▶", size=(32, 28)
-        )
+        self.run_button = wx.Button(sim_pane, wx.ID_ANY, "▶", size=(32, 28))
         self.continue_button = wx.Button(
             sim_pane, wx.ID_ANY, "+10", size=(45, 28)
         )
@@ -682,21 +700,22 @@ class Gui(wx.Frame):
         self.last_cycles_spin = wx.SpinCtrl(
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
         )
-        self.reset_button = wx.Button(
-            sim_pane, wx.ID_ANY, "↺", size=(32, 28)
-        )
+        self.reset_button = wx.Button(sim_pane, wx.ID_ANY, "↺", size=(32, 28))
 
         self.switch_label = wx.StaticText(
             switch_pane, wx.ID_ANY, _("Select switch:")
         )
         self.switch_list = wx.ListCtrl(
-            switch_pane, wx.ID_ANY,
+            switch_pane,
+            wx.ID_ANY,
             style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_HRULES,
         )
         self.switch_list.InsertColumn(0, _("Switch"))
         self.switch_list.InsertColumn(1, _("Value"), wx.LIST_FORMAT_CENTER)
         self.switch_list.Bind(wx.EVT_SIZE, self._on_switch_list_size)
-        self.switch_list.Bind(wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag)
+        self.switch_list.Bind(
+            wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag
+        )
         self.switch_on = wx.Button(switch_pane, wx.ID_ANY, _("Set ON"))
         self.switch_off = wx.Button(switch_pane, wx.ID_ANY, _("Set OFF"))
 
@@ -726,18 +745,28 @@ class Gui(wx.Frame):
         # Tooltips
         initial_cycles = self.spin.GetValue()
         self.run_button.SetToolTip(
-            _("Run the simulation from scratch for %d cycles") % initial_cycles)
+            _("Run the simulation from scratch for %d cycles") % initial_cycles
+        )
         self.continue_button.SetToolTip(
-            _("Continue the simulation for %d additional cycles") % initial_cycles)
-        self.reset_button.SetToolTip(_("Reset the simulation to its initial state"))
+            _("Continue the simulation for %d additional cycles")
+            % initial_cycles
+        )
+        self.reset_button.SetToolTip(
+            _("Reset the simulation to its initial state")
+        )
         self.switch_list.SetToolTip(
-            _("Click a switch to select it, then use Set ON / Set OFF"))
+            _("Click a switch to select it, then use Set ON / Set OFF")
+        )
         self.switch_on.SetToolTip(_("Set the selected switch to ON (1)"))
         self.switch_off.SetToolTip(_("Set the selected switch to OFF (0)"))
-        self.add_monitor_btn.SetToolTip(_("Add a monitor to the selected signal"))
+        self.add_monitor_btn.SetToolTip(
+            _("Add a monitor to the selected signal")
+        )
         self.remove_monitor_btn.SetToolTip(_("Remove the selected monitor"))
         self.spin.SetToolTip(_("Number of cycles to run or continue"))
-        self.last_cycles_check.SetToolTip(_("Show only the most recent cycles"))
+        self.last_cycles_check.SetToolTip(
+            _("Show only the most recent cycles")
+        )
         self.last_cycles_spin.SetToolTip(_("Number of recent cycles to show"))
         self.last_cycles_spin.Enable(False)
 
@@ -746,7 +775,9 @@ class Gui(wx.Frame):
         self.spin.Bind(wx.EVT_SPINCTRL, self.on_spin)
         self.run_button.Bind(wx.EVT_BUTTON, self.on_run_button)
         self.continue_button.Bind(wx.EVT_BUTTON, self.on_continue_button)
-        self.last_cycles_check.Bind(wx.EVT_CHECKBOX, self.on_last_cycles_change)
+        self.last_cycles_check.Bind(
+            wx.EVT_CHECKBOX, self.on_last_cycles_change
+        )
         self.last_cycles_spin.Bind(wx.EVT_SPINCTRL, self.on_last_cycles_change)
         self.last_cycles_spin.Bind(wx.EVT_TEXT, self.on_last_cycles_change)
         self.switch_on.Bind(wx.EVT_BUTTON, self.on_switch_on)
@@ -757,7 +788,7 @@ class Gui(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_help_menu, id=wx.ID_HELP)
 
         # ── Sizers and Structural Layout ────────────────────────────────────
-        
+
         # 1. Simulation Container
         # StaticBoxSizer dropped: the AUI caption bar now provides the "Simulation"
         # title, so a second heading would be redundant.
@@ -766,21 +797,40 @@ class Gui(wx.Frame):
         sim_sizer.Add(self.spin, 0, wx.EXPAND | wx.ALL, 5)
 
         view_cycles_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        view_cycles_sizer.Add(self.last_cycles_check, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        view_cycles_sizer.Add(self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_sizer.Add(view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3)
+        view_cycles_sizer.Add(
+            self.last_cycles_check, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        view_cycles_sizer.Add(
+            self.last_cycles_spin, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_sizer.Add(
+            view_cycles_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM, 3
+        )
 
         sim_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sim_btn_sizer.Add(self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_btn_sizer.Add(self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_btn_sizer.Add(self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2)
-        sim_sizer.Add(sim_btn_sizer, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, 3)
+        sim_btn_sizer.Add(
+            self.run_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_btn_sizer.Add(
+            self.continue_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_btn_sizer.Add(
+            self.reset_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_sizer.Add(
+            sim_btn_sizer,
+            0,
+            wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM,
+            3,
+        )
         sim_pane.SetSizer(sim_sizer)
 
         # 2. Switches Container
         switch_sizer = wx.BoxSizer(wx.VERTICAL)
         switch_sizer.Add(self.switch_label, 0, wx.ALL, 5)
-        switch_sizer.Add(self.switch_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        switch_sizer.Add(
+            self.switch_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5
+        )
 
         switch_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.switch_on.SetMinSize((50, -1))
@@ -794,23 +844,28 @@ class Gui(wx.Frame):
         monitor_sizer = wx.BoxSizer(wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 1, wx.EXPAND | wx.ALL, 5)
-        
+
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
         monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
-        monitor_sizer.Add(monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3)
+        monitor_sizer.Add(
+            monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
+        )
         monitor_pane.SetSizer(monitor_sizer)
 
         # 4. Console Container
         console_sizer = wx.BoxSizer(wx.VERTICAL)
         console_sizer.Add(self.console, 1, wx.EXPAND | wx.ALL, 5)
         console_pane.SetSizer(console_sizer)
-        
+
         # The caption bar also doubles as the resize drag target between panes.
         _resizable_pane = lambda pos, caption: (
             agw_aui.AuiPaneInfo()
             .Caption(caption)
-            .Top().Layer(0).Row(0).Position(pos)
+            .Top()
+            .Layer(0)
+            .Row(0)
+            .Position(pos)
             .Resizable(True)
             .CloseButton(False)
             .Floatable(True)
@@ -820,27 +875,42 @@ class Gui(wx.Frame):
             .BottomDockable(False)
         )
 
-        self.aui_manager.AddPane(sim_pane,
-                                 _resizable_pane(0, _("Simulation")).Name("Simulation").
-                                 MinSize((120, 155)).BestSize((200, 195)))
+        self.aui_manager.AddPane(
+            sim_pane,
+            _resizable_pane(0, _("Simulation"))
+            .Name("Simulation")
+            .MinSize((120, 155))
+            .BestSize((200, 195)),
+        )
 
-        self.aui_manager.AddPane(switch_pane,
-                                 _resizable_pane(1, _("Switches")).Name("Switches").
-                                 MinSize((120, 155)).BestSize((200, 195)))
+        self.aui_manager.AddPane(
+            switch_pane,
+            _resizable_pane(1, _("Switches"))
+            .Name("Switches")
+            .MinSize((120, 155))
+            .BestSize((200, 195)),
+        )
 
-        self.aui_manager.AddPane(monitor_pane,
-                                 _resizable_pane(2, _("Monitors")).Name("Monitors").
-                                 MinSize((120, 155)).BestSize((200, 195)))
+        self.aui_manager.AddPane(
+            monitor_pane,
+            _resizable_pane(2, _("Monitors"))
+            .Name("Monitors")
+            .MinSize((120, 155))
+            .BestSize((200, 195)),
+        )
 
         # Console gets a wider BestSize because wx.TextCtrl has no natural
         # fixed width of its own.
-        self.aui_manager.AddPane(console_pane,
-                                 _resizable_pane(3, _("Console")).Name("Console").
-                                 MinSize((200, 155)).BestSize((450, 195)))
-        
+        self.aui_manager.AddPane(
+            console_pane,
+            _resizable_pane(3, _("Console"))
+            .Name("Console")
+            .MinSize((200, 155))
+            .BestSize((450, 195)),
+        )
+
         self.aui_manager.Update()
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
-                    
 
         # ── Inner splitter split ─────────────────────────────────────────────
         self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
@@ -869,6 +939,7 @@ class Gui(wx.Frame):
         # Load the initial file into the viewer if one was provided
         if path:
             self._load_file_into_viewer(path)
+
     def on_destroy(self, event):
         """Safely detach and clean up the active AUI workspace layout layout engine."""
         if hasattr(self, "aui_manager"):
@@ -886,7 +957,9 @@ class Gui(wx.Frame):
         # Header bar: label + close button
         header_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self._viewer_title = wx.StaticText(
-            self.viewer_panel, label=_("File Viewer"), style=wx.ST_ELLIPSIZE_END
+            self.viewer_panel,
+            label=_("File Viewer"),
+            style=wx.ST_ELLIPSIZE_END,
         )
         title_font = self._viewer_title.GetFont()
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
@@ -916,22 +989,35 @@ class Gui(wx.Frame):
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
 
         # Scintilla editor with line numbers
-        self._file_text = wx.stc.StyledTextCtrl(self.viewer_panel, style=wx.BORDER_NONE)
+        self._file_text = wx.stc.StyledTextCtrl(
+            self.viewer_panel, style=wx.BORDER_NONE
+        )
         self._file_text.SetLexer(wx.stc.STC_LEX_NULL)
         mono_font = wx.Font(
-            10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+            10,
+            wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
         )
         self._file_text.StyleSetFont(wx.stc.STC_STYLE_DEFAULT, mono_font)
-        self._file_text.StyleSetBackground(wx.stc.STC_STYLE_DEFAULT, wx.Colour(20, 24, 32))
-        self._file_text.StyleSetForeground(wx.stc.STC_STYLE_DEFAULT, wx.Colour(210, 220, 235))
+        self._file_text.StyleSetBackground(
+            wx.stc.STC_STYLE_DEFAULT, wx.Colour(20, 24, 32)
+        )
+        self._file_text.StyleSetForeground(
+            wx.stc.STC_STYLE_DEFAULT, wx.Colour(210, 220, 235)
+        )
         self._file_text.StyleClearAll()
         self._file_text.SetCaretForeground(wx.Colour(210, 220, 235))
 
         # Line number margin
         self._file_text.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
         self._file_text.SetMarginWidth(0, 48)
-        self._file_text.StyleSetBackground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(30, 35, 45))
-        self._file_text.StyleSetForeground(wx.stc.STC_STYLE_LINENUMBER, wx.Colour(100, 120, 150))
+        self._file_text.StyleSetBackground(
+            wx.stc.STC_STYLE_LINENUMBER, wx.Colour(30, 35, 45)
+        )
+        self._file_text.StyleSetForeground(
+            wx.stc.STC_STYLE_LINENUMBER, wx.Colour(100, 120, 150)
+        )
         # Margin 1: error indicator dots (14 px)
         self._file_text.SetMarginType(1, wx.stc.STC_MARGIN_SYMBOL)
         self._file_text.SetMarginWidth(1, 14)
@@ -941,11 +1027,17 @@ class Gui(wx.Frame):
 
         # Marker 0: red circle in error margin
         self._file_text.MarkerDefine(
-            0, wx.stc.STC_MARK_CIRCLE, wx.Colour(220, 60, 60), wx.Colour(200, 40, 40)
+            0,
+            wx.stc.STC_MARK_CIRCLE,
+            wx.Colour(220, 60, 60),
+            wx.Colour(200, 40, 40),
         )
         # Marker 1: full-line red background
         self._file_text.MarkerDefine(
-            1, wx.stc.STC_MARK_BACKGROUND, wx.Colour(80, 20, 20), wx.Colour(70, 18, 18)
+            1,
+            wx.stc.STC_MARK_BACKGROUND,
+            wx.Colour(80, 20, 20),
+            wx.Colour(70, 18, 18),
         )
 
         # Style 40: red italic text used for inline error annotations
@@ -955,7 +1047,9 @@ class Gui(wx.Frame):
         self._file_text.AnnotationSetVisible(2)  # 2 = STC_ANNOTATION_BOXED
 
         self._error_map = {}  # 0-indexed line → error string
-        self._file_text.Bind(wx.stc.EVT_STC_MARGINCLICK, self._on_error_margin_click)
+        self._file_text.Bind(
+            wx.stc.EVT_STC_MARGINCLICK, self._on_error_margin_click
+        )
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
@@ -1057,7 +1151,7 @@ class Gui(wx.Frame):
         self._error_map = {}
         first_line = None
         for err in errors:
-            m = re.search(r'at\s+(?:line\s+)?(\d+)', err)
+            m = re.search(r"at\s+(?:line\s+)?(\d+)", err)
             if m:
                 ln = int(m.group(1)) - 1  # STC lines are 0-indexed
                 # Accumulate multiple errors on the same line
@@ -1109,7 +1203,9 @@ class Gui(wx.Frame):
                 wx.ICON_ERROR | wx.OK,
             )
             self.SetStatusText(_("Implement failed: parse errors in file."))
-            self.log(_("Implement failed: parse errors in %s") % self._viewer_path)
+            self.log(
+                _("Implement failed: parse errors in %s") % self._viewer_path
+            )
             for e in parser.errors:
                 self.log(e)
             self._highlight_errors(parser.errors)
@@ -1219,7 +1315,8 @@ class Gui(wx.Frame):
         )
 
         display_names = [
-            clean_name + _(" (on)") for clean_name, raw_name in monitored_signals
+            clean_name + _(" (on)")
+            for clean_name, raw_name in monitored_signals
         ]
         display_names.extend(
             [clean_name for clean_name, raw_name in non_monitored_signals]
@@ -1295,7 +1392,9 @@ class Gui(wx.Frame):
         self.log(_("Continue clicked: %d cycles requested.") % cycles)
         if self.run_network(cycles):
             self.cycles_completed += cycles
-            self.SetStatusText(_("Completed %d cycles.") % self.cycles_completed)
+            self.SetStatusText(
+                _("Completed %d cycles.") % self.cycles_completed
+            )
             self.log(_("Completed %d total cycles.") % self.cycles_completed)
         self.update_monitors_list()
         self.canvas.render()
@@ -1316,7 +1415,9 @@ class Gui(wx.Frame):
             self.update_switch_list()
             self.canvas.render()
         else:
-            self.SetStatusText(_("Error: could not set switch %s.") % clean_switch_name)
+            self.SetStatusText(
+                _("Error: could not set switch %s.") % clean_switch_name
+            )
 
     def on_switch_off(self, event):
         """Handle the event when the user clicks the switch off button."""
@@ -1335,7 +1436,9 @@ class Gui(wx.Frame):
             self.update_switch_list()
             self.canvas.render()
         else:
-            self.SetStatusText(_("Error: could not set switch %s.") % clean_switch_name)
+            self.SetStatusText(
+                _("Error: could not set switch %s.") % clean_switch_name
+            )
 
     def on_add_monitor(self, event):
         """Handle the event when the user clicks the add monitor button."""
@@ -1361,7 +1464,9 @@ class Gui(wx.Frame):
         elif monitor_error == self.monitors.MONITOR_PRESENT:
             self.SetStatusText(_("Monitor already active: %s") % signal_name)
         else:
-            self.SetStatusText(_("Error: could not add monitor %s") % signal_name)
+            self.SetStatusText(
+                _("Error: could not add monitor %s") % signal_name
+            )
         self.update_monitors_list()
         self.canvas.render()
 
@@ -1384,7 +1489,9 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Removed monitor: %s") % signal_name)
             self.log(_("Removed monitor: %s") % signal_name)
         else:
-            self.SetStatusText(_("Error: monitor is not active: %s") % signal_name)
+            self.SetStatusText(
+                _("Error: monitor is not active: %s") % signal_name
+            )
         self.update_monitors_list()
         self.canvas.render()
 
@@ -1492,8 +1599,12 @@ class Gui(wx.Frame):
         pos_x = int(pan_x_pct * scrollable_x) if scrollable_x > 0 else 0
         pos_y = int(pan_y_pct * scrollable_y) if scrollable_y > 0 else 0
 
-        self.h_scroll.SetScrollbar(pos_x, h_thumb, range_max, h_thumb, refresh=True)
-        self.v_scroll.SetScrollbar(pos_y, v_thumb, range_max, v_thumb, refresh=True)
+        self.h_scroll.SetScrollbar(
+            pos_x, h_thumb, range_max, h_thumb, refresh=True
+        )
+        self.v_scroll.SetScrollbar(
+            pos_y, v_thumb, range_max, v_thumb, refresh=True
+        )
 
     def on_reset_view(self, event):
         """Reset all view parameters back to defaults and refresh canvas."""
@@ -1542,7 +1653,9 @@ class Gui(wx.Frame):
     def update_switch_list(self):
         """Repopulate the switch list with current names and state (0/1) from backend."""
         sel = self.switch_list.GetFirstSelected()
-        selected_name = self.switch_list.GetItemText(sel, 0) if sel != -1 else None
+        selected_name = (
+            self.switch_list.GetItemText(sel, 0) if sel != -1 else None
+        )
 
         self.switch_list.DeleteAllItems()
         self._switch_map = {}
@@ -1553,7 +1666,9 @@ class Gui(wx.Frame):
             self._switch_map[clean_name] = raw_name
             state = self.devices.get_device(switch_id).switch_state
             value = "1" if state == self.devices.HIGH else "0"
-            idx = self.switch_list.InsertItem(self.switch_list.GetItemCount(), clean_name)
+            idx = self.switch_list.InsertItem(
+                self.switch_list.GetItemCount(), clean_name
+            )
             self.switch_list.SetItem(idx, 1, value)
 
         wx.CallAfter(self._rescale_switch_cols)
