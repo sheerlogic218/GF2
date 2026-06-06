@@ -175,8 +175,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             GL.glEnd()
             GL.glDisable(GL.GL_LINE_STIPPLE)
 
-            # X-axis cycle number labels in the bottom margin
-            label_y = canvas_height - 8
+            # X-axis cycle number labels – pinned to the visible viewport bottom
+            # so they remain on-screen at any zoom / pan position.
+            _zoom = getattr(self, "zoom", 1.0)
+            label_y = self.pan_y + canvas_height / _zoom - 8
             raw_step = math.ceil(28 / cycle_width) if cycle_width > 0 else 1
             label_step = next(
                 (
@@ -391,7 +393,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 height = max(1, size.height)
                 visible_width = width / self.zoom
                 visible_height = height / self.zoom
-                max_pan_x = max(0.0, width - visible_width)
+                _xz = getattr(self, "x_zoom", 1.0)
+                max_pan_x = max(
+                    0.0, 80 + (width - 120) * _xz + 40 - visible_width
+                )
                 max_pan_y = max(0.0, height - visible_height)
 
                 self.pan_x = max(0.0, min(self.pan_x, max_pan_x))
@@ -465,7 +470,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             height = max(1, size.height)
             visible_width = width / self.zoom
             visible_height = height / self.zoom
-            max_pan_x = max(0.0, width - visible_width)
+            _xz = getattr(self, "x_zoom", 1.0)
+            max_pan_x = max(0.0, 80 + (width - 120) * _xz + 40 - visible_width)
             max_pan_y = max(0.0, height - visible_height)
 
             gl_dx = (dx / width) * visible_width
@@ -749,10 +755,10 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                 )
 
         # Shared extents used by the floor grid, planes, and labels
-        x_lo    = -(max_cycles / 2.0) * CYCLE_W
-        x_hi    =  (max_cycles / 2.0) * CYCLE_W
-        z_lo    = -(num_signals / 2.0) * LANE_D
-        z_hi    =  (num_signals / 2.0) * LANE_D
+        x_lo = -(max_cycles / 2.0) * CYCLE_W
+        x_hi = (max_cycles / 2.0) * CYCLE_W
+        z_lo = -(num_signals / 2.0) * LANE_D
+        z_hi = (num_signals / 2.0) * LANE_D
         floor_y = -6.5
 
         # Floor grid (opaque)
@@ -776,9 +782,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
         GL.glDepthMask(GL.GL_FALSE)
         for k, (key, _) in enumerate(signal_items):
-            z_c  = (k - (num_signals - 1) / 2.0) * LANE_D
-            z0   = z_c - TRACE_DEPTH / 2
-            z1   = z_c + TRACE_DEPTH / 2
+            z_c = (k - (num_signals - 1) / 2.0) * LANE_D
+            z0 = z_c - TRACE_DEPTH / 2
+            z1 = z_c + TRACE_DEPTH / 2
             r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
             for plane_y, alpha in ((-6 + HIGH_H, 0.18), (-6 + LOW_H, 0.11)):
                 GL.glColor4f(r, g, b, alpha)
@@ -794,9 +800,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
 
         # Plane border outlines (one solid-colour line loop per plane per lane)
         for k, (key, _) in enumerate(signal_items):
-            z_c  = (k - (num_signals - 1) / 2.0) * LANE_D
-            z0   = z_c - TRACE_DEPTH / 2
-            z1   = z_c + TRACE_DEPTH / 2
+            z_c = (k - (num_signals - 1) / 2.0) * LANE_D
+            z0 = z_c - TRACE_DEPTH / 2
+            z1 = z_c + TRACE_DEPTH / 2
             r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
             for plane_y, dim in ((-6 + HIGH_H, 0.70), (-6 + LOW_H, 0.40)):
                 GL.glColor3f(r * dim, g * dim, b * dim)
@@ -807,10 +813,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                 GL.glVertex3f(x_lo, plane_y, z1)
                 GL.glEnd()
 
-        # Cycle numbers along the X axis (at the front edge of the scene)
+        # Cycle numbers along the X axis – at both the front and back edges
         GL.glColor3f(0.65, 0.70, 0.80)
-        label_z  = z_hi + 14
-        label_y  = floor_y + 3
+        label_y = floor_y + 3
         raw_step = max(1, int(30 / CYCLE_W))
         step = next(
             (n for n in [1, 2, 5, 10, 20, 50, 100, 250] if n >= raw_step),
@@ -818,7 +823,8 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         )
         for i in range(0, max_cycles + 1, step):
             x = x_lo + i * CYCLE_W
-            self.render_text(str(i), x - 3, label_y, label_z)
+            self.render_text(str(i), x - 3, label_y, z_hi + 14)  # front edge
+            self.render_text(str(i), x - 3, label_y, z_lo - 14)  # back edge
 
         GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
@@ -1100,10 +1106,10 @@ class Gui(wx.Frame):
         self.monitors_list = wx.ListBox(
             monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
-        self.add_monitor_btn    = wx.Button(monitor_pane, wx.ID_ANY, "+")
+        self.add_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "+")
         self.remove_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "-")
-        self.monitor_up_btn     = wx.Button(monitor_pane, wx.ID_ANY, "↑")
-        self.monitor_down_btn   = wx.Button(monitor_pane, wx.ID_ANY, "↓")
+        self.monitor_up_btn = wx.Button(monitor_pane, wx.ID_ANY, "↑")
+        self.monitor_down_btn = wx.Button(monitor_pane, wx.ID_ANY, "↓")
 
         self.console = wx.TextCtrl(
             console_pane,
@@ -1227,10 +1233,10 @@ class Gui(wx.Frame):
         monitor_sizer.Add(self.monitors_list, 1, wx.EXPAND | wx.ALL, 5)
 
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        monitor_btn_sizer.Add(self.add_monitor_btn,    1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
         monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.monitor_up_btn,     1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.monitor_down_btn,   1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_up_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_down_btn, 1, wx.ALL, 2)
         monitor_sizer.Add(
             monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
         )
