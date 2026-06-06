@@ -748,15 +748,17 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                     x_c, z_center, CYCLE_W / 2 - 0.5, TRACE_DEPTH / 2, h
                 )
 
-        # Floor grid
+        # Shared extents used by the floor grid, planes, and labels
+        x_lo    = -(max_cycles / 2.0) * CYCLE_W
+        x_hi    =  (max_cycles / 2.0) * CYCLE_W
+        z_lo    = -(num_signals / 2.0) * LANE_D
+        z_hi    =  (num_signals / 2.0) * LANE_D
+        floor_y = -6.5
+
+        # Floor grid (opaque)
         GL.glDisable(GL.GL_LIGHTING)
         GL.glColor3f(0.20, 0.25, 0.35)
         GL.glLineWidth(1.0)
-        x_lo = -(max_cycles / 2.0) * CYCLE_W
-        x_hi = (max_cycles / 2.0) * CYCLE_W
-        z_lo = -(num_signals / 2.0) * LANE_D
-        z_hi = (num_signals / 2.0) * LANE_D
-        floor_y = -6.5
         GL.glBegin(GL.GL_LINES)
         for i in range(max_cycles + 1):
             x = x_lo + i * CYCLE_W
@@ -767,8 +769,58 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             GL.glVertex3f(x_lo, floor_y, z)
             GL.glVertex3f(x_hi, floor_y, z)
         GL.glEnd()
-        GL.glEnable(GL.GL_LIGHTING)
 
+        # HIGH and LOW reference planes – semi-transparent quads per lane
+        GL.glDisable(GL.GL_CULL_FACE)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glDepthMask(GL.GL_FALSE)
+        for k, (key, _) in enumerate(signal_items):
+            z_c  = (k - (num_signals - 1) / 2.0) * LANE_D
+            z0   = z_c - TRACE_DEPTH / 2
+            z1   = z_c + TRACE_DEPTH / 2
+            r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
+            for plane_y, alpha in ((-6 + HIGH_H, 0.18), (-6 + LOW_H, 0.11)):
+                GL.glColor4f(r, g, b, alpha)
+                GL.glBegin(GL.GL_QUADS)
+                GL.glVertex3f(x_lo, plane_y, z0)
+                GL.glVertex3f(x_hi, plane_y, z0)
+                GL.glVertex3f(x_hi, plane_y, z1)
+                GL.glVertex3f(x_lo, plane_y, z1)
+                GL.glEnd()
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glDisable(GL.GL_BLEND)
+        GL.glEnable(GL.GL_CULL_FACE)
+
+        # Plane border outlines (one solid-colour line loop per plane per lane)
+        for k, (key, _) in enumerate(signal_items):
+            z_c  = (k - (num_signals - 1) / 2.0) * LANE_D
+            z0   = z_c - TRACE_DEPTH / 2
+            z1   = z_c + TRACE_DEPTH / 2
+            r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
+            for plane_y, dim in ((-6 + HIGH_H, 0.70), (-6 + LOW_H, 0.40)):
+                GL.glColor3f(r * dim, g * dim, b * dim)
+                GL.glBegin(GL.GL_LINE_LOOP)
+                GL.glVertex3f(x_lo, plane_y, z0)
+                GL.glVertex3f(x_hi, plane_y, z0)
+                GL.glVertex3f(x_hi, plane_y, z1)
+                GL.glVertex3f(x_lo, plane_y, z1)
+                GL.glEnd()
+
+        # Cycle numbers along the X axis (at the front edge of the scene)
+        GL.glColor3f(0.65, 0.70, 0.80)
+        label_z  = z_hi + 14
+        label_y  = floor_y + 3
+        raw_step = max(1, int(30 / CYCLE_W))
+        step = next(
+            (n for n in [1, 2, 5, 10, 20, 50, 100, 250] if n >= raw_step),
+            raw_step,
+        )
+        for i in range(0, max_cycles + 1, step):
+            x = x_lo + i * CYCLE_W
+            self.render_text(str(i), x - 3, label_y, label_z)
+
+        GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
         self.SwapBuffers()
 
@@ -1048,8 +1100,10 @@ class Gui(wx.Frame):
         self.monitors_list = wx.ListBox(
             monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
-        self.add_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "+")
+        self.add_monitor_btn    = wx.Button(monitor_pane, wx.ID_ANY, "+")
         self.remove_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "-")
+        self.monitor_up_btn     = wx.Button(monitor_pane, wx.ID_ANY, "↑")
+        self.monitor_down_btn   = wx.Button(monitor_pane, wx.ID_ANY, "↓")
 
         self.console = wx.TextCtrl(
             console_pane,
@@ -1086,6 +1140,8 @@ class Gui(wx.Frame):
             _("Add a monitor to the selected signal")
         )
         self.remove_monitor_btn.SetToolTip(_("Remove the selected monitor"))
+        self.monitor_up_btn.SetToolTip(_("Move selected monitor up"))
+        self.monitor_down_btn.SetToolTip(_("Move selected monitor down"))
         self.spin.SetToolTip(_("Number of cycles to run or continue"))
         self.last_cycles_check.SetToolTip(
             _("Show only the most recent cycles")
@@ -1107,6 +1163,8 @@ class Gui(wx.Frame):
         self.switch_off.Bind(wx.EVT_BUTTON, self.on_switch_off)
         self.add_monitor_btn.Bind(wx.EVT_BUTTON, self.on_add_monitor)
         self.remove_monitor_btn.Bind(wx.EVT_BUTTON, self.on_remove_monitor)
+        self.monitor_up_btn.Bind(wx.EVT_BUTTON, self.on_monitor_move_up)
+        self.monitor_down_btn.Bind(wx.EVT_BUTTON, self.on_monitor_move_down)
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
         self.Bind(wx.EVT_MENU, self.on_help_menu, id=wx.ID_HELP)
 
@@ -1169,8 +1227,10 @@ class Gui(wx.Frame):
         monitor_sizer.Add(self.monitors_list, 1, wx.EXPAND | wx.ALL, 5)
 
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.add_monitor_btn,    1, wx.ALL, 2)
         monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_up_btn,     1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_down_btn,   1, wx.ALL, 2)
         monitor_sizer.Add(
             monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
         )
@@ -1867,6 +1927,27 @@ class Gui(wx.Frame):
             self.monitors.monitors_dict[key] = old_dict[key]
         self.update_monitors_list()
         self._render_canvas()
+
+    def on_monitor_move_up(self, _):
+        """Move the selected monitored signal one position earlier."""
+        sel = self.monitors_list.GetSelection()
+        if sel == wx.NOT_FOUND or sel == 0:
+            return
+        if sel >= len(self.monitors.monitors_dict):
+            return  # a non-monitored entry is selected
+        self.on_monitor_reorder(sel, sel - 1)
+        self.monitors_list.SetSelection(sel - 1)
+
+    def on_monitor_move_down(self, _):
+        """Move the selected monitored signal one position later."""
+        sel = self.monitors_list.GetSelection()
+        if sel == wx.NOT_FOUND:
+            return
+        n = len(self.monitors.monitors_dict)
+        if sel >= n - 1:
+            return  # already last monitored, or a non-monitored entry
+        self.on_monitor_reorder(sel, sel + 1)
+        self.monitors_list.SetSelection(sel + 1)
 
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
