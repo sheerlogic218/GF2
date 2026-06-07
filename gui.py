@@ -1228,15 +1228,23 @@ class Gui(wx.Frame):
         switch_pane.SetSizer(switch_sizer)
 
         # 3. Monitors Container
+        for _btn in (
+            self.add_monitor_btn,
+            self.remove_monitor_btn,
+            self.monitor_up_btn,
+            self.monitor_down_btn,
+        ):
+            _btn.SetMinSize((28, 28))
+
         monitor_sizer = wx.BoxSizer(wx.VERTICAL)
         monitor_sizer.Add(self.monitors_label, 0, wx.ALL, 5)
         monitor_sizer.Add(self.monitors_list, 1, wx.EXPAND | wx.ALL, 5)
 
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.monitor_up_btn, 1, wx.ALL, 2)
-        monitor_btn_sizer.Add(self.monitor_down_btn, 1, wx.ALL, 2)
+        monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.EXPAND | wx.ALL, 2)
+        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.EXPAND | wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_up_btn, 1, wx.EXPAND | wx.ALL, 2)
+        monitor_btn_sizer.Add(self.monitor_down_btn, 1, wx.EXPAND | wx.ALL, 2)
         monitor_sizer.Add(
             monitor_btn_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 3
         )
@@ -1284,7 +1292,7 @@ class Gui(wx.Frame):
             monitor_pane,
             _resizable_pane(2, _("Monitors"))
             .Name("Monitors")
-            .MinSize((120, 155))
+            .MinSize((160, 155))
             .BestSize((200, 195)),
         )
 
@@ -1322,6 +1330,7 @@ class Gui(wx.Frame):
         # Initialise scrollbar state
         self.update_scrollbars()
         self._switch_col_ratio = 0.5
+        self._nonmonitored_order = None  # persistent display order for inactive signals
         self.update_switch_list()
         self.update_monitors_list()
 
@@ -1616,6 +1625,7 @@ class Gui(wx.Frame):
         self._file_text.MarkerDeleteAll(1)
         self._file_text.AnnotationClearAll()
         self._error_map = {}
+        self._nonmonitored_order = None  # reset ordering for the new circuit
         self.update_switch_list()
         self.update_monitors_list()
         self.update_scrollbars()
@@ -1737,24 +1747,28 @@ class Gui(wx.Frame):
             self.monitors.get_signal_names()
         )
 
-        display_names = [
-            clean_name + _(" (on)")
-            for clean_name, raw_name in monitored_signals
-        ]
-        display_names.extend(
-            [clean_name for clean_name, raw_name in non_monitored_signals]
-        )
+        # Build a lookup for non-monitored signals so we can apply the stored order.
+        nm_dict = {
+            clean_name: raw_name for clean_name, raw_name in non_monitored_signals
+        }
+        if self._nonmonitored_order is None:
+            self._nonmonitored_order = list(nm_dict.keys())
+        else:
+            # Keep user-defined order; append newly-seen signals at the end.
+            kept = [k for k in self._nonmonitored_order if k in nm_dict]
+            added = [k for k in nm_dict if k not in self._nonmonitored_order]
+            self._nonmonitored_order = kept + added
+
+        display_names = [pair[0] + _(" (on)") for pair in monitored_signals]
+        display_names.extend(self._nonmonitored_order)
         self.monitors_list.Set(display_names)
 
         self._monitor_choices = {
-            clean_name + " (on)": raw_name
+            clean_name + _(" (on)"): raw_name
             for clean_name, raw_name in monitored_signals
         }
         self._monitor_choices.update(
-            {
-                clean_name: raw_name
-                for clean_name, raw_name in non_monitored_signals
-            }
+            {k: nm_dict[k] for k in self._nonmonitored_order}
         )
 
     def on_last_cycles_change(self, event):
@@ -1935,25 +1949,43 @@ class Gui(wx.Frame):
         self._render_canvas()
 
     def on_monitor_move_up(self, _):
-        """Move the selected monitored signal one position earlier."""
+        """Move the selected list entry one position earlier."""
         sel = self.monitors_list.GetSelection()
         if sel == wx.NOT_FOUND or sel == 0:
             return
-        if sel >= len(self.monitors.monitors_dict):
-            return  # a non-monitored entry is selected
-        self.on_monitor_reorder(sel, sel - 1)
-        self.monitors_list.SetSelection(sel - 1)
+        n_mon = len(self.monitors.monitors_dict)
+        if sel < n_mon:
+            # Active monitor — reorder monitors_dict
+            self.on_monitor_reorder(sel, sel - 1)
+        elif sel > n_mon:
+            # Non-monitored signal — reorder the display list
+            nm_idx = sel - n_mon
+            order = self._nonmonitored_order
+            order[nm_idx], order[nm_idx - 1] = order[nm_idx - 1], order[nm_idx]
+            self.update_monitors_list()
+        # sel == n_mon means first non-monitored entry; can't cross the boundary
+        self.monitors_list.SetSelection(sel - 1 if sel != n_mon else sel)
 
     def on_monitor_move_down(self, _):
-        """Move the selected monitored signal one position later."""
+        """Move the selected list entry one position later."""
         sel = self.monitors_list.GetSelection()
         if sel == wx.NOT_FOUND:
             return
-        n = len(self.monitors.monitors_dict)
-        if sel >= n - 1:
-            return  # already last monitored, or a non-monitored entry
-        self.on_monitor_reorder(sel, sel + 1)
-        self.monitors_list.SetSelection(sel + 1)
+        n_mon = len(self.monitors.monitors_dict)
+        total = self.monitors_list.GetCount()
+        if sel >= total - 1:
+            return
+        if sel < n_mon - 1:
+            # Active monitor — reorder monitors_dict
+            self.on_monitor_reorder(sel, sel + 1)
+        elif sel >= n_mon:
+            # Non-monitored signal — reorder the display list
+            nm_idx = sel - n_mon
+            order = self._nonmonitored_order
+            order[nm_idx], order[nm_idx + 1] = order[nm_idx + 1], order[nm_idx]
+            self.update_monitors_list()
+        # sel == n_mon - 1 means last active monitor; can't cross the boundary
+        self.monitors_list.SetSelection(sel + 1 if sel != n_mon - 1 else sel)
 
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
