@@ -1429,6 +1429,7 @@ class Gui(wx.Frame):
         )
         self._file_text.StyleClearAll()
         self._file_text.SetCaretForeground(wx.Colour(210, 220, 235))
+        self._file_text.SetWrapMode(wx.stc.STC_WRAP_WORD)
 
         # Line number margin
         self._file_text.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
