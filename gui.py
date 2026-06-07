@@ -1610,6 +1610,13 @@ class Gui(wx.Frame):
         if not self._save_viewer_contents():
             return
 
+        # Clear all previous highlights before every parse attempt so stale
+        # error markers never persist after the underlying issue is fixed.
+        self._file_text.MarkerDeleteAll(0)
+        self._file_text.MarkerDeleteAll(1)
+        self._file_text.AnnotationClearAll()
+        self._error_map = {}
+
         names = Names()
         devices = Devices(names)
         network = Network(names, devices)
@@ -1643,11 +1650,6 @@ class Gui(wx.Frame):
         self.canvas3d.devices = devices
         self.canvas3d.monitors = monitors
         self.canvas3d.previous_signal_traces = {}
-
-        self._file_text.MarkerDeleteAll(0)
-        self._file_text.MarkerDeleteAll(1)
-        self._file_text.AnnotationClearAll()
-        self._error_map = {}
         self._nonmonitored_order = None  # reset ordering for the new circuit
         self.update_switch_list()
         self.update_monitors_list()
