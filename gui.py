@@ -1,5 +1,4 @@
 """Implement the graphical user interface for the Logic Simulator.
-
 Used in the Logic Simulator project to enable the user to run the simulation
 or adjust the network properties.
 
@@ -832,7 +831,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
             GL.glColor3f(r * 0.9, g * 0.9, b * 0.9)
             self.render_text("HIGH", x_hi + 6, -6 + HIGH_H, z_c)
-            self.render_text("LOW",  x_hi + 6, -6 + LOW_H,  z_c)
+            self.render_text("LOW", x_hi + 6, -6 + LOW_H, z_c)
 
         GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
@@ -938,36 +937,38 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
 class LogicViewerDialog(wx.Dialog):
     """Scrollable gate-level schematic of the implemented circuit."""
 
-    _NODE_W = 104
-    _ROW_GAP = 18
-    _LAYER_GAP = 194
+    _NODE_MIN_W = 96
+    _NODE_MAX_W = 230
+    _WIRE_MIN_W = 60
+    _ROW_GAP = 22
+    _LAYER_GAP = 96  # horizontal space between columns (room for wires)
     _PAD = 50
 
     _BG = {
-        "AND":    wx.Colour(25, 55, 95),
-        "OR":     wx.Colour(20, 70, 50),
-        "NAND":   wx.Colour(75, 25, 75),
-        "NOR":    wx.Colour(75, 45, 20),
-        "XOR":    wx.Colour(20, 70, 75),
-        "NOT":    wx.Colour(65, 20, 85),
-        "CLOCK":  wx.Colour(75, 70, 15),
+        "AND": wx.Colour(25, 55, 95),
+        "OR": wx.Colour(20, 70, 50),
+        "NAND": wx.Colour(75, 25, 75),
+        "NOR": wx.Colour(75, 45, 20),
+        "XOR": wx.Colour(20, 70, 75),
+        "NOT": wx.Colour(65, 20, 85),
+        "CLOCK": wx.Colour(75, 70, 15),
         "SWITCH": wx.Colour(50, 70, 25),
-        "DTYPE":  wx.Colour(75, 35, 15),
-        "WIRE":   wx.Colour(30, 35, 45),
+        "DTYPE": wx.Colour(75, 35, 15),
+        "WIRE": wx.Colour(30, 35, 45),
         "UNKNOWN": wx.Colour(55, 55, 55),
     }
 
     _OUTLINE_COL = {
-        "AND":    wx.Colour(100, 170, 255),
-        "OR":     wx.Colour(80, 200, 140),
-        "NAND":   wx.Colour(200, 100, 200),
-        "NOR":    wx.Colour(220, 140, 80),
-        "XOR":    wx.Colour(80, 200, 210),
-        "NOT":    wx.Colour(190, 90, 230),
-        "CLOCK":  wx.Colour(220, 200, 80),
+        "AND": wx.Colour(100, 170, 255),
+        "OR": wx.Colour(80, 200, 140),
+        "NAND": wx.Colour(200, 100, 200),
+        "NOR": wx.Colour(220, 140, 80),
+        "XOR": wx.Colour(80, 200, 210),
+        "NOT": wx.Colour(190, 90, 230),
+        "CLOCK": wx.Colour(220, 200, 80),
         "SWITCH": wx.Colour(130, 200, 80),
-        "DTYPE":  wx.Colour(220, 140, 80),
-        "WIRE":   wx.Colour(80, 110, 150),
+        "DTYPE": wx.Colour(220, 140, 80),
+        "WIRE": wx.Colour(80, 110, 150),
         "UNKNOWN": wx.Colour(140, 140, 140),
     }
 
@@ -984,19 +985,63 @@ class LogicViewerDialog(wx.Dialog):
         self._nodes = {}  # device_id → node dict
         self._edges = []  # (src_id, src_port_id, dst_id, dst_port_id)
         self._zoom = 1.0
+        self._pan_anchor = None  # (mouse_x, mouse_y, scroll_x, scroll_y)
 
         self._scroll = wx.ScrolledWindow(self, style=wx.HSCROLL | wx.VSCROLL)
         self._scroll.SetBackgroundColour(wx.Colour(18, 22, 30))
         self._scroll.Bind(wx.EVT_PAINT, self._on_paint)
         self._scroll.Bind(wx.EVT_MOUSEWHEEL, self._on_wheel)
+        # Left-drag to pan the schematic.
+        self._scroll.Bind(wx.EVT_LEFT_DOWN, self._on_drag_start)
+        self._scroll.Bind(wx.EVT_LEFT_UP, self._on_drag_end)
+        self._scroll.Bind(wx.EVT_MOTION, self._on_drag_motion)
+        self._scroll.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self._on_drag_end)
+
+        # Bottom control strip: zoom buttons + hint.
+        bar = wx.Panel(self)
+        bar.SetBackgroundColour(wx.Colour(30, 34, 44))
+        bar_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        btn_out = wx.Button(bar, label="−", size=(34, 26))
+        btn_in = wx.Button(bar, label="+", size=(34, 26))
+        btn_reset = wx.Button(bar, label=_("Fit"), size=(-1, 26))
+        btn_out.SetToolTip(_("Zoom out"))
+        btn_in.SetToolTip(_("Zoom in"))
+        btn_reset.SetToolTip(_("Reset zoom to fit"))
+        btn_out.Bind(wx.EVT_BUTTON, lambda e: self._zoom_by(1.0 / 1.25))
+        btn_in.Bind(wx.EVT_BUTTON, lambda e: self._zoom_by(1.25))
+        btn_reset.Bind(wx.EVT_BUTTON, lambda e: self._zoom_fit())
+        hint = wx.StaticText(
+            bar, label=_("Scroll to zoom • drag to pan")
+        )
+        hint.SetForegroundColour(wx.Colour(150, 160, 175))
+        bar_sizer.Add(btn_out, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
+        bar_sizer.Add(btn_in, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
+        bar_sizer.Add(btn_reset, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
+        bar_sizer.AddStretchSpacer()
+        bar_sizer.Add(hint, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 8)
+        bar.SetSizer(bar_sizer)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(self._scroll, 1, wx.EXPAND)
+        sizer.Add(bar, 0, wx.EXPAND)
         self.SetSizer(sizer)
 
         self._build_graph()
+        self._measure_nodes()
         self._layout()
         self._update_virtual_size()
+        # Fit the whole schematic into the window once it has been laid out.
+        wx.CallAfter(self._zoom_fit)
+
+    @staticmethod
+    def _font(size, bold=False):
+        """Build a monospace font used for both measuring and drawing."""
+        return wx.Font(
+            size,
+            wx.FONTFAMILY_TELETYPE,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL,
+        )
 
     # ── graph building ──────────────────────────────────────────────────────
 
@@ -1032,19 +1077,18 @@ class LogicViewerDialog(wx.Dialog):
             short, kind = self._kind_tag(dev)
             in_ports = list(dev.inputs.keys())
             out_ports = list(dev.outputs.keys())
-            is_wire = (kind == "WIRE")
-            node_w = 72 if is_wire else self._NODE_W
-            h = 26 if is_wire else (max(52, len(in_ports) * 22 + 20) if in_ports else 52)
             self._nodes[dev_id] = {
                 "x": 0,
                 "y": 0,
-                "w": node_w,
-                "h": h,
+                "w": self._NODE_MIN_W,  # refined in _measure_nodes()
+                "h": 54,
                 "label": label,
                 "short": short,
                 "kind": kind,
                 "in_ports": in_ports,
                 "out_ports": out_ports,
+                "left_w": 0,
+                "right_w": 0,
                 "layer": 0,
             }
 
@@ -1078,11 +1122,17 @@ class LogicViewerDialog(wx.Dialog):
                 if self._nodes[nid]["kind"] != "WIRE":
                     continue
 
-                in_edges  = [(s, sp, d, dp) for s, sp, d, dp in self._edges if d == nid]
-                out_edges = [(s, sp, d, dp) for s, sp, d, dp in self._edges if s == nid]
+                in_edges = [
+                    (s, sp, d, dp) for s, sp, d, dp in self._edges if d == nid
+                ]
+                out_edges = [
+                    (s, sp, d, dp) for s, sp, d, dp in self._edges if s == nid
+                ]
 
                 # Remove all edges touching this node, then the node itself.
-                self._edges = [e for e in self._edges if e[0] != nid and e[2] != nid]
+                self._edges = [
+                    e for e in self._edges if e[0] != nid and e[2] != nid
+                ]
                 del self._nodes[nid]
                 changed = True
 
@@ -1090,9 +1140,63 @@ class LogicViewerDialog(wx.Dialog):
                     src_id, src_port, _, _ = in_edges[0]
                     for _, _, dst_id, dst_port in out_edges:
                         if dst_id in self._nodes:
-                            self._edges.append((src_id, src_port, dst_id, dst_port))
+                            self._edges.append(
+                                (src_id, src_port, dst_id, dst_port)
+                            )
                 # If no upstream exists the downstream edges are simply dropped.
                 break  # restart scan after mutating _nodes
+
+    def _measure_nodes(self):
+        """Size each node box to fit its label and port text (BestSize)."""
+        dc = wx.MemoryDC(wx.Bitmap(4, 4))
+        f_short = self._font(8, bold=True)
+        f_label = self._font(7)
+        f_port = self._font(6)
+
+        def text_w(font, text):
+            if not text:
+                return 0
+            dc.SetFont(font)
+            return dc.GetTextExtent(text)[0]
+
+        for node in self._nodes.values():
+            is_wire = node["kind"] == "WIRE"
+            sw = text_w(f_label if is_wire else f_short, node["short"])
+            lw = text_w(f_label, node["label"])
+
+            left_w = 0
+            for pid in node["in_ports"]:
+                nm = (
+                    (self._names.get_pretty_name(pid) or "")
+                    if pid is not None
+                    else ""
+                )
+                left_w = max(left_w, text_w(f_port, nm))
+            right_w = 0
+            for pid in node["out_ports"]:
+                nm = (
+                    (self._names.get_pretty_name(pid) or "")
+                    if pid is not None
+                    else ""
+                )
+                right_w = max(right_w, text_w(f_port, nm))
+            node["left_w"] = left_w
+            node["right_w"] = right_w
+
+            if is_wire:
+                node["w"] = int(max(self._WIRE_MIN_W, lw + 18))
+                node["h"] = 26
+                continue
+
+            header_w = max(sw, lw) + 16
+            port_w = (left_w + right_w + 22) if (left_w or right_w) else 0
+            w = max(self._NODE_MIN_W, header_w, port_w)
+            node["w"] = int(min(w, self._NODE_MAX_W))
+
+            n_rows = max(
+                len(node["in_ports"]), len(node["out_ports"]), 1
+            )
+            node["h"] = int(max(54, n_rows * 24 + 22))
 
     # ── layout ──────────────────────────────────────────────────────────────
 
@@ -1102,14 +1206,14 @@ class LogicViewerDialog(wx.Dialog):
 
         succs = {nid: [] for nid in self._nodes}
         preds = {nid: [] for nid in self._nodes}
-        for src, _, dst, _ in self._edges:
+        for src, _sp, dst, _dp in self._edges:
             if src != dst and src in self._nodes and dst in self._nodes:
                 if dst not in succs[src]:
                     succs[src].append(dst)
                 if src not in preds[dst]:
                     preds[dst].append(src)
 
-        # Iterative longest-path layer assignment (handles back-edges gracefully)
+        # 1. Longest-path layer assignment (handles back-edges gracefully).
         layer = {nid: 0 for nid in self._nodes}
         for _ in range(len(self._nodes)):
             changed = False
@@ -1120,23 +1224,89 @@ class LogicViewerDialog(wx.Dialog):
                         changed = True
             if not changed:
                 break
-
         for nid in self._nodes:
             self._nodes[nid]["layer"] = layer[nid]
 
-        # Stack nodes within each layer
-        by_layer = {}
-        for nid, node in self._nodes.items():
-            by_layer.setdefault(node["layer"], []).append(nid)
+        order = {}
+        for nid in self._nodes:
+            order.setdefault(layer[nid], []).append(nid)
+        layer_ids = sorted(order.keys())
 
-        for l_nodes in by_layer.values():
-            y = self._PAD
-            for nid in l_nodes:
+        # 2. Crossing reduction: order each layer by the median position of
+        #    its neighbours in the adjacent layer (Sugiyama median heuristic).
+        def median(nid, pos, neigh):
+            idxs = sorted(pos[x] for x in neigh[nid] if x in pos)
+            if not idxs:
+                return None
+            m = len(idxs)
+            if m % 2:
+                return float(idxs[m // 2])
+            return (idxs[m // 2 - 1] + idxs[m // 2]) / 2.0
+
+        for sweep in range(10):
+            down = sweep % 2 == 0
+            seq = layer_ids[1:] if down else list(reversed(layer_ids[:-1]))
+            for li in seq:
+                adj = li - 1 if down else li + 1
+                if adj not in order:
+                    continue
+                pos = {nid: i for i, nid in enumerate(order[adj])}
+                neigh = preds if down else succs
+                keys = {}
+                for i, nid in enumerate(order[li]):
+                    mk = median(nid, pos, neigh)
+                    keys[nid] = i if mk is None else mk
+                order[li].sort(key=lambda nid: keys[nid])
+
+        # 3. Initial vertical stacking in the resolved order.
+        for li in layer_ids:
+            y = float(self._PAD)
+            for nid in order[li]:
                 self._nodes[nid]["y"] = y
                 y += self._nodes[nid]["h"] + self._ROW_GAP
 
+        # 4. Straighten wires: pull each node toward the average centre of its
+        #    neighbours, then push apart any overlaps while keeping order.
+        for _ in range(16):
+            for li in layer_ids:
+                for nid in order[li]:
+                    neigh = preds[nid] + succs[nid]
+                    centres = [
+                        self._nodes[m]["y"] + self._nodes[m]["h"] / 2.0
+                        for m in neigh
+                        if m in self._nodes
+                    ]
+                    if centres:
+                        target = sum(centres) / len(centres)
+                        self._nodes[nid]["y"] = (
+                            target - self._nodes[nid]["h"] / 2.0
+                        )
+                self._resolve_overlaps(order[li])
+
+        # Normalise so the topmost node sits at the padding margin.
+        min_y = min(n["y"] for n in self._nodes.values())
+        shift = self._PAD - min_y
+        for n in self._nodes.values():
+            n["y"] = int(round(n["y"] + shift))
+
+        # 5. Horizontal columns: each layer gets enough room for its widest box.
+        layer_x = {}
+        x_cursor = self._PAD
+        for li in layer_ids:
+            layer_x[li] = x_cursor
+            widest = max(self._nodes[nid]["w"] for nid in order[li])
+            x_cursor += widest + self._LAYER_GAP
         for nid, node in self._nodes.items():
-            node["x"] = self._PAD + node["layer"] * self._LAYER_GAP
+            node["x"] = layer_x[node["layer"]]
+
+    def _resolve_overlaps(self, nids):
+        """Push nodes (already in vertical order) apart to remove overlap."""
+        for i in range(1, len(nids)):
+            prev = self._nodes[nids[i - 1]]
+            cur = self._nodes[nids[i]]
+            min_y = prev["y"] + prev["h"] + self._ROW_GAP
+            if cur["y"] < min_y:
+                cur["y"] = min_y
 
     # ── scrolling / zoom ────────────────────────────────────────────────────
 
@@ -1153,9 +1323,53 @@ class LogicViewerDialog(wx.Dialog):
 
     def _on_wheel(self, event):
         factor = 1.1 if event.GetWheelRotation() > 0 else 1.0 / 1.1
-        self._zoom = max(0.25, min(4.0, self._zoom * factor))
+        self._zoom_by(factor)
+
+    def _zoom_by(self, factor):
+        self._zoom = max(0.2, min(4.0, self._zoom * factor))
         self._update_virtual_size()
         self._scroll.Refresh()
+
+    def _zoom_fit(self):
+        """Pick a zoom that fits the whole schematic in the viewport."""
+        if not self._nodes:
+            return
+        max_x = max(n["x"] + n["w"] for n in self._nodes.values()) + self._PAD
+        max_y = max(n["y"] + n["h"] for n in self._nodes.values()) + self._PAD
+        vw, vh = self._scroll.GetClientSize()
+        if vw <= 1 or vh <= 1 or max_x <= 0 or max_y <= 0:
+            return
+        self._zoom = max(0.2, min(2.0, min(vw / max_x, vh / max_y)))
+        self._update_virtual_size()
+        self._scroll.Scroll(0, 0)
+        self._scroll.Refresh()
+
+    # ── drag-to-pan ──────────────────────────────────────────────────────────
+
+    def _on_drag_start(self, event):
+        self._pan_anchor = (
+            event.GetX(),
+            event.GetY(),
+            self._scroll.GetViewStart(),
+        )
+        if not self._scroll.HasCapture():
+            self._scroll.CaptureMouse()
+        self._scroll.SetCursor(wx.Cursor(wx.CURSOR_SIZING))
+
+    def _on_drag_motion(self, event):
+        if self._pan_anchor is None or not event.Dragging():
+            return
+        ax, ay, (sx, sy) = self._pan_anchor
+        ppu_x, ppu_y = self._scroll.GetScrollPixelsPerUnit()
+        dx = (ax - event.GetX()) // max(1, ppu_x)
+        dy = (ay - event.GetY()) // max(1, ppu_y)
+        self._scroll.Scroll(sx + dx, sy + dy)
+
+    def _on_drag_end(self, event):
+        if self._scroll.HasCapture():
+            self._scroll.ReleaseMouse()
+        self._pan_anchor = None
+        self._scroll.SetCursor(wx.NullCursor)
 
     # ── drawing ─────────────────────────────────────────────────────────────
 
@@ -1182,15 +1396,21 @@ class LogicViewerDialog(wx.Dialog):
 
         if not self._nodes:
             gc.SetFont(
-                wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+                wx.Font(
+                    12,
+                    wx.FONTFAMILY_DEFAULT,
+                    wx.FONTSTYLE_NORMAL,
+                    wx.FONTWEIGHT_NORMAL,
+                ),
                 wx.Colour(160, 160, 160),
             )
             gc.DrawText(_("No circuit implemented yet."), self._PAD, self._PAD)
             return
 
-        # Wires (drawn beneath nodes)
+        # Wires (drawn beneath nodes), routed between the port stub tips and
+        # drawn semi-transparent so overlapping runs stay legible.
         wire_pen = gc.CreatePen(
-            wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
+            wx.GraphicsPenInfo(wx.Colour(80, 160, 230, 190)).Width(1.5 / z)
         )
         gc.SetPen(wire_pen)
         for src_id, src_port, dst_id, dst_port in self._edges:
@@ -1198,14 +1418,17 @@ class LogicViewerDialog(wx.Dialog):
             dn = self._nodes.get(dst_id)
             if sn is None or dn is None:
                 continue
-            sx = sn["x"] + sn["w"]
+            sx = sn["x"] + sn["w"] + 10  # output stub tip
             sy = sn["y"] + self._port_y(sn, src_port, "out")
-            dx = dn["x"]
+            dx = dn["x"] - 10  # input stub tip
             dy = dn["y"] + self._port_y(dn, dst_port, "in")
-            mid = (sx + dx) / 2
+            # Horizontal control points give a smooth S-curve that leaves and
+            # arrives horizontally, matching the stub direction.
+            c1 = sx + max(24, (dx - sx) * 0.5)
+            c2 = dx - max(24, (dx - sx) * 0.5)
             path = gc.CreatePath()
             path.MoveToPoint(sx, sy)
-            path.AddCurveToPoint(mid, sy, mid, dy, dx, dy)
+            path.AddCurveToPoint(c1, sy, c2, dy, dx, dy)
             gc.StrokePath(path)
 
         for node in self._nodes.values():
@@ -1221,8 +1444,12 @@ class LogicViewerDialog(wx.Dialog):
         path = gc.CreatePath()
         path.MoveToPoint(x, y)
         path.AddLineToPoint(x + mx, y)
-        path.AddCurveToPoint(x + mx + k * r, y,    x + w, y + r - k * r, x + w, y + r)
-        path.AddCurveToPoint(x + w, y + r + k * r, x + mx + k * r, y + h, x + mx, y + h)
+        path.AddCurveToPoint(
+            x + mx + k * r, y, x + w, y + r - k * r, x + w, y + r
+        )
+        path.AddCurveToPoint(
+            x + w, y + r + k * r, x + mx + k * r, y + h, x + mx, y + h
+        )
         path.AddLineToPoint(x, y + h)
         path.CloseSubpath()
         gc.DrawPath(path)
@@ -1236,9 +1463,15 @@ class LogicViewerDialog(wx.Dialog):
         back = w * 0.22
         path = gc.CreatePath()
         path.MoveToPoint(x, y)
-        path.AddCurveToPoint(x + w * 0.50, y,           x + w * 0.90, y + h * 0.15, x + w, y + h * 0.5)
-        path.AddCurveToPoint(x + w * 0.90, y + h * 0.85, x + w * 0.50, y + h,       x, y + h)
-        path.AddCurveToPoint(x + back, y + h * 0.70, x + back, y + h * 0.30, x, y)
+        path.AddCurveToPoint(
+            x + w * 0.50, y, x + w * 0.90, y + h * 0.15, x + w, y + h * 0.5
+        )
+        path.AddCurveToPoint(
+            x + w * 0.90, y + h * 0.85, x + w * 0.50, y + h, x, y + h
+        )
+        path.AddCurveToPoint(
+            x + back, y + h * 0.70, x + back, y + h * 0.30, x, y
+        )
         path.CloseSubpath()
         gc.DrawPath(path)
         if negate:
@@ -1254,9 +1487,12 @@ class LogicViewerDialog(wx.Dialog):
         extra = gc.CreatePath()
         extra.MoveToPoint(x + xoff, y + 2)
         extra.AddCurveToPoint(
-            x + back + xoff, y + h * 0.30,
-            x + back + xoff, y + h * 0.70,
-            x + xoff, y + h - 2,
+            x + back + xoff,
+            y + h * 0.30,
+            x + back + xoff,
+            y + h * 0.70,
+            x + xoff,
+            y + h - 2,
         )
         gc.StrokePath(extra)
 
@@ -1275,10 +1511,22 @@ class LogicViewerDialog(wx.Dialog):
 
     # ── node rendering ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _fit_text(gc, text, max_px):
+        """Trim text with an ellipsis until it fits within max_px (current font)."""
+        if not text:
+            return text
+        if gc.GetTextExtent(text)[0] <= max_px:
+            return text
+        ell = "…"
+        while text and gc.GetTextExtent(text + ell)[0] > max_px:
+            text = text[:-1]
+        return (text + ell) if text else ell
+
     def _draw_node(self, gc, node, z):
         x, y, w, h = node["x"], node["y"], node["w"], node["h"]
         kind = node["kind"]
-        bg      = self._BG.get(kind, self._BG["UNKNOWN"])
+        bg = self._BG.get(kind, self._BG["UNKNOWN"])
         outline = self._OUTLINE_COL.get(kind, self._OUTLINE_COL["UNKNOWN"])
 
         gc.SetBrush(gc.CreateBrush(wx.Brush(bg)))
@@ -1287,14 +1535,10 @@ class LogicViewerDialog(wx.Dialog):
         if kind == "WIRE":
             # Pill-shaped terminal for named wires / output buffers
             gc.DrawRoundedRectangle(x, y, w, h, h / 2)
-            wire_label = node["label"]
-            if len(wire_label) > 9:
-                wire_label = wire_label[:8] + "…"
-            gc.SetFont(
-                wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
-                wx.Colour(180, 210, 240),
+            gc.SetFont(self._font(7), wx.Colour(180, 210, 240))
+            gc.DrawText(
+                self._fit_text(gc, node["label"], w - 12), x + 6, y + 6
             )
-            gc.DrawText(wire_label, x + 6, y + 6)
         else:
             if kind in ("AND", "NAND"):
                 self._draw_and_body(gc, x, y, w, h, z, negate=(kind == "NAND"))
@@ -1307,27 +1551,22 @@ class LogicViewerDialog(wx.Dialog):
             else:
                 gc.DrawRoundedRectangle(x, y, w, h, 5)
 
-            # Gate type label (bold) + signal name
-            label = node["label"]
-            if len(label) > 11:
-                label = label[:10] + "…"
-            gc.SetFont(
-                wx.Font(8, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD),
-                wx.Colour(200, 225, 255),
+            # Gate type label (bold) + signal name, fitted to the box width.
+            gc.SetFont(self._font(8, bold=True), wx.Colour(200, 225, 255))
+            gc.DrawText(
+                self._fit_text(gc, node["short"], w - 12), x + 5, y + 3
             )
-            gc.DrawText(node["short"], x + 5, y + 3)
-            gc.SetFont(
-                wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
-                wx.Colour(150, 185, 215),
+            gc.SetFont(self._font(7), wx.Colour(150, 185, 215))
+            gc.DrawText(
+                self._fit_text(gc, node["label"], w - 12), x + 5, y + 15
             )
-            gc.DrawText(label, x + 5, y + 15)
 
         stub_pen = gc.CreatePen(
             wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
         )
-        lbl_font = wx.Font(6, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        lbl_font = self._font(6)
 
-        # Input stubs
+        # Input stubs (labels drawn just inside the left edge)
         in_ports = node["in_ports"]
         n_in = len(in_ports)
         for i, pid in enumerate(in_ports):
@@ -1341,9 +1580,9 @@ class LogicViewerDialog(wx.Dialog):
             )
             if pname:
                 gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
-                gc.DrawText(pname[:5], x + 3, py - 9)
+                gc.DrawText(pname, x + 4, py - 9)
 
-        # Output stubs
+        # Output stubs (labels right-aligned just inside the right edge)
         out_ports = node["out_ports"]
         n_out = len(out_ports)
         for i, pid in enumerate(out_ports):
@@ -1357,7 +1596,8 @@ class LogicViewerDialog(wx.Dialog):
             )
             if pname:
                 gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
-                gc.DrawText(pname[:5], x + w - 18, py - 9)
+                tw = gc.GetTextExtent(pname)[0]
+                gc.DrawText(pname, x + w - tw - 4, py - 9)
 
         # Clock triangle on the CLK input of a flip-flop
         if kind == "DTYPE" and n_in > 0:
