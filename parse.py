@@ -127,6 +127,7 @@ class Parser:
 
     def parse_network(self):
         """Parse the circuit definition file."""
+        # TODO - temporary fix with try except look
         try:
             # get first symbol
             self.next_symbol()
@@ -147,7 +148,9 @@ class Parser:
                     device = self.devices.get_device(device_id)
                     for input_id in device.inputs:
                         if (
-                            self.network.get_connected_output(device_id, input_id)
+                            self.network.get_connected_output(
+                                device_id, input_id
+                            )
                             is None
                         ):
                             dev_name = self.names.get_pretty_name(device_id)
