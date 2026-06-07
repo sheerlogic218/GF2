@@ -952,6 +952,7 @@ class LogicViewerDialog(wx.Dialog):
         "CLOCK":  wx.Colour(75, 70, 15),
         "SWITCH": wx.Colour(50, 70, 25),
         "DTYPE":  wx.Colour(75, 35, 15),
+        "WIRE":   wx.Colour(30, 35, 45),
         "UNKNOWN": wx.Colour(55, 55, 55),
     }
 
@@ -964,6 +965,7 @@ class LogicViewerDialog(wx.Dialog):
         "CLOCK":  wx.Colour(220, 200, 80),
         "SWITCH": wx.Colour(130, 200, 80),
         "DTYPE":  wx.Colour(220, 140, 80),
+        "WIRE":   wx.Colour(80, 110, 150),
         "UNKNOWN": wx.Colour(140, 140, 140),
     }
 
@@ -1000,6 +1002,10 @@ class LogicViewerDialog(wx.Dialog):
         """Return (short_label, kind_key) for a device."""
         d = self._devices
         k = device.device_kind
+        # 1-input AND gates are internal wire/buffer nodes created by the parser
+        # for every named signal. Show them as wire terminals, not AND gates.
+        if k == d.AND and len(device.inputs) == 1:
+            return ("", "WIRE")
         table = {
             d.AND: ("AND", "AND"),
             d.OR: ("OR", "OR"),
@@ -1022,11 +1028,13 @@ class LogicViewerDialog(wx.Dialog):
             short, kind = self._kind_tag(dev)
             in_ports = list(dev.inputs.keys())
             out_ports = list(dev.outputs.keys())
-            h = max(52, len(in_ports) * 22 + 20) if in_ports else 52
+            is_wire = (kind == "WIRE")
+            node_w = 72 if is_wire else self._NODE_W
+            h = 26 if is_wire else (max(52, len(in_ports) * 22 + 20) if in_ports else 52)
             self._nodes[dev_id] = {
                 "x": 0,
                 "y": 0,
-                "w": self._NODE_W,
+                "w": node_w,
                 "h": h,
                 "label": label,
                 "short": short,
@@ -1223,31 +1231,41 @@ class LogicViewerDialog(wx.Dialog):
         gc.SetBrush(gc.CreateBrush(wx.Brush(bg)))
         gc.SetPen(gc.CreatePen(wx.GraphicsPenInfo(outline).Width(1.5 / z)))
 
-        if kind in ("AND", "NAND"):
-            self._draw_and_body(gc, x, y, w, h, z, negate=(kind == "NAND"))
-        elif kind in ("OR", "NOR"):
-            self._draw_or_body(gc, x, y, w, h, z, negate=(kind == "NOR"))
-        elif kind == "XOR":
-            self._draw_xor_body(gc, x, y, w, h, z)
+        if kind == "WIRE":
+            # Pill-shaped terminal for named wires / output buffers
+            gc.DrawRoundedRectangle(x, y, w, h, h / 2)
+            wire_label = node["label"]
+            if len(wire_label) > 9:
+                wire_label = wire_label[:8] + "…"
+            gc.SetFont(
+                wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+                wx.Colour(180, 210, 240),
+            )
+            gc.DrawText(wire_label, x + 6, y + 6)
         else:
-            gc.DrawRoundedRectangle(x, y, w, h, 5)
+            if kind in ("AND", "NAND"):
+                self._draw_and_body(gc, x, y, w, h, z, negate=(kind == "NAND"))
+            elif kind in ("OR", "NOR"):
+                self._draw_or_body(gc, x, y, w, h, z, negate=(kind == "NOR"))
+            elif kind == "XOR":
+                self._draw_xor_body(gc, x, y, w, h, z)
+            else:
+                gc.DrawRoundedRectangle(x, y, w, h, 5)
 
-        # Gate type label
-        gc.SetFont(
-            wx.Font(8, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD),
-            wx.Colour(200, 225, 255),
-        )
-        gc.DrawText(node["short"], x + 5, y + 3)
-
-        # Signal name (truncated)
-        label = node["label"]
-        if len(label) > 11:
-            label = label[:10] + "…"
-        gc.SetFont(
-            wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
-            wx.Colour(150, 185, 215),
-        )
-        gc.DrawText(label, x + 5, y + 15)
+            # Gate type label (bold) + signal name
+            label = node["label"]
+            if len(label) > 11:
+                label = label[:10] + "…"
+            gc.SetFont(
+                wx.Font(8, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD),
+                wx.Colour(200, 225, 255),
+            )
+            gc.DrawText(node["short"], x + 5, y + 3)
+            gc.SetFont(
+                wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+                wx.Colour(150, 185, 215),
+            )
+            gc.DrawText(label, x + 5, y + 15)
 
         stub_pen = gc.CreatePen(
             wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
