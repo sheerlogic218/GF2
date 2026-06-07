@@ -1307,6 +1307,7 @@ class Gui(wx.Frame):
         )
 
         self.aui_manager.Update()
+        self.top_panel.Bind(wx.EVT_SIZE, self._on_top_panel_size)
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
 
         # ── Inner splitter split ─────────────────────────────────────────────
@@ -1343,6 +1344,28 @@ class Gui(wx.Frame):
         if hasattr(self, "aui_manager"):
             self.aui_manager.UnInit()
         event.Skip()
+
+    def _on_top_panel_size(self, event):
+        """Keep AUI pane heights in sync with the top panel so they fill it."""
+        event.Skip()
+        wx.CallAfter(self._fit_aui_panes_to_panel)
+
+    def _fit_aui_panes_to_panel(self):
+        h = self.top_panel.GetClientSize().GetHeight()
+        if h <= 0:
+            return
+        # agw_aui caches dock heights in dock.size and re-uses them on every
+        # Update(), ignoring BestSize once set.  Patch the stored dock size
+        # directly so the Top dock always fills the full panel height.
+        AUI_DOCK_TOP = 1
+        for dock in self.aui_manager._docks:
+            if dock.dock_direction == AUI_DOCK_TOP:
+                dock.size = h
+        for name in ("Simulation", "Switches", "Monitors"):
+            pane = self.aui_manager.GetPane(name)
+            if pane.IsOk():
+                pane.BestSize(pane.best_size.GetWidth(), h)
+        self.aui_manager.Update()
 
     # ── File viewer ──────────────────────────────────────────────────────────
 
