@@ -949,6 +949,7 @@ class LogicViewerDialog(wx.Dialog):
         "NAND":   wx.Colour(75, 25, 75),
         "NOR":    wx.Colour(75, 45, 20),
         "XOR":    wx.Colour(20, 70, 75),
+        "NOT":    wx.Colour(65, 20, 85),
         "CLOCK":  wx.Colour(75, 70, 15),
         "SWITCH": wx.Colour(50, 70, 25),
         "DTYPE":  wx.Colour(75, 35, 15),
@@ -962,6 +963,7 @@ class LogicViewerDialog(wx.Dialog):
         "NAND":   wx.Colour(200, 100, 200),
         "NOR":    wx.Colour(220, 140, 80),
         "XOR":    wx.Colour(80, 200, 210),
+        "NOT":    wx.Colour(190, 90, 230),
         "CLOCK":  wx.Colour(220, 200, 80),
         "SWITCH": wx.Colour(130, 200, 80),
         "DTYPE":  wx.Colour(220, 140, 80),
@@ -1002,10 +1004,12 @@ class LogicViewerDialog(wx.Dialog):
         """Return (short_label, kind_key) for a device."""
         d = self._devices
         k = device.device_kind
-        # 1-input AND gates are internal wire/buffer nodes created by the parser
-        # for every named signal. Show them as wire terminals, not AND gates.
+        # 1-input AND gates are internal wire/buffer nodes — collapse them out.
         if k == d.AND and len(device.inputs) == 1:
             return ("", "WIRE")
+        # 1-input NAND is a NOT/inverter gate, not a multi-input NAND.
+        if k == d.NAND and len(device.inputs) == 1:
+            return ("NOT", "NOT")
         table = {
             d.AND: ("AND", "AND"),
             d.OR: ("OR", "OR"),
@@ -1053,6 +1057,42 @@ class LogicViewerDialog(wx.Dialog):
                     src_id, src_port = conn
                     if src_id in self._nodes and dev_id in self._nodes:
                         self._edges.append((src_id, src_port, dev_id, inp_id))
+
+        self._collapse_wire_nodes()
+
+    def _collapse_wire_nodes(self):
+        """Remove pass-through WIRE (1-input AND buffer) nodes from the graph.
+
+        Each WIRE node is bypassed: its single upstream output is wired
+        directly to every downstream input.  WIRE nodes with no upstream
+        (unbound module-port inputs) are simply dropped together with their
+        outgoing edges so the downstream gate's stub appears unconnected.
+        The loop repeats until no WIRE nodes remain, handling chains.
+        """
+        changed = True
+        while changed:
+            changed = False
+            for nid in list(self._nodes.keys()):
+                if nid not in self._nodes:
+                    continue
+                if self._nodes[nid]["kind"] != "WIRE":
+                    continue
+
+                in_edges  = [(s, sp, d, dp) for s, sp, d, dp in self._edges if d == nid]
+                out_edges = [(s, sp, d, dp) for s, sp, d, dp in self._edges if s == nid]
+
+                # Remove all edges touching this node, then the node itself.
+                self._edges = [e for e in self._edges if e[0] != nid and e[2] != nid]
+                del self._nodes[nid]
+                changed = True
+
+                if len(in_edges) == 1:
+                    src_id, src_port, _, _ = in_edges[0]
+                    for _, _, dst_id, dst_port in out_edges:
+                        if dst_id in self._nodes:
+                            self._edges.append((src_id, src_port, dst_id, dst_port))
+                # If no upstream exists the downstream edges are simply dropped.
+                break  # restart scan after mutating _nodes
 
     # ── layout ──────────────────────────────────────────────────────────────
 
@@ -1220,6 +1260,19 @@ class LogicViewerDialog(wx.Dialog):
         )
         gc.StrokePath(extra)
 
+    def _draw_not_body(self, gc, x, y, w, h):
+        """Triangle (buffer/inverter) body with a bubble at the output tip."""
+        tip_x = x + w * 0.76
+        path = gc.CreatePath()
+        path.MoveToPoint(x, y)
+        path.AddLineToPoint(x, y + h)
+        path.AddLineToPoint(tip_x, y + h / 2)
+        path.CloseSubpath()
+        gc.DrawPath(path)
+        br = min(5.0, h / 8)
+        gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(210, 210, 240))))
+        gc.DrawEllipse(tip_x - br, y + h / 2 - br, br * 2, br * 2)
+
     # ── node rendering ───────────────────────────────────────────────────────
 
     def _draw_node(self, gc, node, z):
@@ -1249,6 +1302,8 @@ class LogicViewerDialog(wx.Dialog):
                 self._draw_or_body(gc, x, y, w, h, z, negate=(kind == "NOR"))
             elif kind == "XOR":
                 self._draw_xor_body(gc, x, y, w, h, z)
+            elif kind == "NOT":
+                self._draw_not_body(gc, x, y, w, h)
             else:
                 gc.DrawRoundedRectangle(x, y, w, h, 5)
 
@@ -2094,7 +2149,7 @@ class Gui(wx.Frame):
             self.canvas.render()
 
     def _on_logic_viewer(self, event):
-        """Open the gate-level schematic dialog."""
+        """Open the gate-level schematic as a modeless window."""
         if not self.devices.find_devices():
             wx.MessageBox(
                 _("Please implement a circuit file first."),
@@ -2102,9 +2157,19 @@ class Gui(wx.Frame):
                 wx.OK | wx.ICON_INFORMATION,
             )
             return
+        # If already open, just bring it to the front
+        if getattr(self, "_logic_viewer_dlg", None) is not None:
+            self._logic_viewer_dlg.Raise()
+            return
         dlg = LogicViewerDialog(self, self.devices, self.network, self.names)
-        dlg.ShowModal()
-        dlg.Destroy()
+        self._logic_viewer_dlg = dlg
+
+        def _on_close(_e):
+            self._logic_viewer_dlg = None
+            dlg.Destroy()
+
+        dlg.Bind(wx.EVT_CLOSE, _on_close)
+        dlg.Show()
 
     def _on_toggle_3d(self, event):
         """Switch between the 2D and 3D signal views."""
