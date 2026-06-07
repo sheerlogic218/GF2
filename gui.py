@@ -826,6 +826,14 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             self.render_text(str(i), x - 3, label_y, z_hi + 14)  # front edge
             self.render_text(str(i), x - 3, label_y, z_lo - 14)  # back edge
 
+        # HIGH and LOW level labels — one pair at the right end of each lane
+        for k, (key, _) in enumerate(signal_items):
+            z_c = (k - (num_signals - 1) / 2.0) * LANE_D
+            r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
+            GL.glColor3f(r * 0.9, g * 0.9, b * 0.9)
+            self.render_text("HIGH", x_hi + 6, -6 + HIGH_H, z_c)
+            self.render_text("LOW",  x_hi + 6, -6 + LOW_H,  z_c)
+
         GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
         self.SwapBuffers()
@@ -925,6 +933,384 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             else:
                 GLUT.glutBitmapCharacter(font, ord(ch))
         GL.glEnable(GL.GL_LIGHTING)
+
+
+class LogicViewerDialog(wx.Dialog):
+    """Scrollable gate-level schematic of the implemented circuit."""
+
+    _NODE_W = 104
+    _ROW_GAP = 18
+    _LAYER_GAP = 194
+    _PAD = 50
+
+    _BG = {
+        "AND":    wx.Colour(25, 55, 95),
+        "OR":     wx.Colour(20, 70, 50),
+        "NAND":   wx.Colour(75, 25, 75),
+        "NOR":    wx.Colour(75, 45, 20),
+        "XOR":    wx.Colour(20, 70, 75),
+        "CLOCK":  wx.Colour(75, 70, 15),
+        "SWITCH": wx.Colour(50, 70, 25),
+        "DTYPE":  wx.Colour(75, 35, 15),
+        "UNKNOWN": wx.Colour(55, 55, 55),
+    }
+
+    _OUTLINE_COL = {
+        "AND":    wx.Colour(100, 170, 255),
+        "OR":     wx.Colour(80, 200, 140),
+        "NAND":   wx.Colour(200, 100, 200),
+        "NOR":    wx.Colour(220, 140, 80),
+        "XOR":    wx.Colour(80, 200, 210),
+        "CLOCK":  wx.Colour(220, 200, 80),
+        "SWITCH": wx.Colour(130, 200, 80),
+        "DTYPE":  wx.Colour(220, 140, 80),
+        "UNKNOWN": wx.Colour(140, 140, 140),
+    }
+
+    def __init__(self, parent, devices, network, names):
+        super().__init__(
+            parent,
+            title=_("Logic Viewer"),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+            size=(980, 660),
+        )
+        self._devices = devices
+        self._network = network
+        self._names = names
+        self._nodes = {}  # device_id → node dict
+        self._edges = []  # (src_id, src_port_id, dst_id, dst_port_id)
+        self._zoom = 1.0
+
+        self._scroll = wx.ScrolledWindow(self, style=wx.HSCROLL | wx.VSCROLL)
+        self._scroll.SetBackgroundColour(wx.Colour(18, 22, 30))
+        self._scroll.Bind(wx.EVT_PAINT, self._on_paint)
+        self._scroll.Bind(wx.EVT_MOUSEWHEEL, self._on_wheel)
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self._scroll, 1, wx.EXPAND)
+        self.SetSizer(sizer)
+
+        self._build_graph()
+        self._layout()
+        self._update_virtual_size()
+
+    # ── graph building ──────────────────────────────────────────────────────
+
+    def _kind_tag(self, device):
+        """Return (short_label, kind_key) for a device."""
+        d = self._devices
+        k = device.device_kind
+        table = {
+            d.AND: ("AND", "AND"),
+            d.OR: ("OR", "OR"),
+            d.NAND: ("NAND", "NAND"),
+            d.NOR: ("NOR", "NOR"),
+            d.XOR: ("XOR", "XOR"),
+            d.CLOCK: ("CLK", "CLOCK"),
+            d.SWITCH: ("SW", "SWITCH"),
+            d.D_TYPE: ("FF", "DTYPE"),
+        }
+        return table.get(k, ("?", "UNKNOWN"))
+
+    def _build_graph(self):
+        d = self._devices
+        for dev_id in d.find_devices():
+            dev = d.get_device(dev_id)
+            if dev is None:
+                continue
+            label = self._names.get_pretty_name(dev_id) or "?"
+            short, kind = self._kind_tag(dev)
+            in_ports = list(dev.inputs.keys())
+            out_ports = list(dev.outputs.keys())
+            h = max(52, len(in_ports) * 22 + 20) if in_ports else 52
+            self._nodes[dev_id] = {
+                "x": 0,
+                "y": 0,
+                "w": self._NODE_W,
+                "h": h,
+                "label": label,
+                "short": short,
+                "kind": kind,
+                "in_ports": in_ports,
+                "out_ports": out_ports,
+                "layer": 0,
+            }
+
+        for dev_id in d.find_devices():
+            dev = d.get_device(dev_id)
+            if dev is None:
+                continue
+            for inp_id, conn in dev.inputs.items():
+                if conn is not None:
+                    src_id, src_port = conn
+                    if src_id in self._nodes and dev_id in self._nodes:
+                        self._edges.append((src_id, src_port, dev_id, inp_id))
+
+    # ── layout ──────────────────────────────────────────────────────────────
+
+    def _layout(self):
+        if not self._nodes:
+            return
+
+        succs = {nid: [] for nid in self._nodes}
+        preds = {nid: [] for nid in self._nodes}
+        for src, _, dst, _ in self._edges:
+            if src != dst and src in self._nodes and dst in self._nodes:
+                if dst not in succs[src]:
+                    succs[src].append(dst)
+                if src not in preds[dst]:
+                    preds[dst].append(src)
+
+        # Iterative longest-path layer assignment (handles back-edges gracefully)
+        layer = {nid: 0 for nid in self._nodes}
+        for _ in range(len(self._nodes)):
+            changed = False
+            for nid in self._nodes:
+                for suc in succs[nid]:
+                    if layer[suc] <= layer[nid]:
+                        layer[suc] = layer[nid] + 1
+                        changed = True
+            if not changed:
+                break
+
+        for nid in self._nodes:
+            self._nodes[nid]["layer"] = layer[nid]
+
+        # Stack nodes within each layer
+        by_layer = {}
+        for nid, node in self._nodes.items():
+            by_layer.setdefault(node["layer"], []).append(nid)
+
+        for l_nodes in by_layer.values():
+            y = self._PAD
+            for nid in l_nodes:
+                self._nodes[nid]["y"] = y
+                y += self._nodes[nid]["h"] + self._ROW_GAP
+
+        for nid, node in self._nodes.items():
+            node["x"] = self._PAD + node["layer"] * self._LAYER_GAP
+
+    # ── scrolling / zoom ────────────────────────────────────────────────────
+
+    def _update_virtual_size(self):
+        if not self._nodes:
+            self._scroll.SetScrollRate(10, 10)
+            self._scroll.SetVirtualSize(400, 300)
+            return
+        z = self._zoom
+        max_x = max(n["x"] + n["w"] for n in self._nodes.values()) + self._PAD
+        max_y = max(n["y"] + n["h"] for n in self._nodes.values()) + self._PAD
+        self._scroll.SetVirtualSize(int(max_x * z), int(max_y * z))
+        self._scroll.SetScrollRate(10, 10)
+
+    def _on_wheel(self, event):
+        factor = 1.1 if event.GetWheelRotation() > 0 else 1.0 / 1.1
+        self._zoom = max(0.25, min(4.0, self._zoom * factor))
+        self._update_virtual_size()
+        self._scroll.Refresh()
+
+    # ── drawing ─────────────────────────────────────────────────────────────
+
+    def _port_y(self, node, port_id, side):
+        """Y offset of a port within the node box."""
+        ports = node["in_ports"] if side == "in" else node["out_ports"]
+        n = len(ports)
+        if n == 0:
+            return node["h"] / 2
+        try:
+            idx = ports.index(port_id)
+        except ValueError:
+            return node["h"] / 2
+        return (idx + 1) * node["h"] / (n + 1)
+
+    def _on_paint(self, event):
+        dc = wx.PaintDC(self._scroll)
+        self._scroll.PrepareDC(dc)
+        gc = wx.GraphicsContext.Create(dc)
+        if gc is None:
+            return
+        z = self._zoom
+        gc.Scale(z, z)
+
+        if not self._nodes:
+            gc.SetFont(
+                wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+                wx.Colour(160, 160, 160),
+            )
+            gc.DrawText(_("No circuit implemented yet."), self._PAD, self._PAD)
+            return
+
+        # Wires (drawn beneath nodes)
+        wire_pen = gc.CreatePen(
+            wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
+        )
+        gc.SetPen(wire_pen)
+        for src_id, src_port, dst_id, dst_port in self._edges:
+            sn = self._nodes.get(src_id)
+            dn = self._nodes.get(dst_id)
+            if sn is None or dn is None:
+                continue
+            sx = sn["x"] + sn["w"]
+            sy = sn["y"] + self._port_y(sn, src_port, "out")
+            dx = dn["x"]
+            dy = dn["y"] + self._port_y(dn, dst_port, "in")
+            mid = (sx + dx) / 2
+            path = gc.CreatePath()
+            path.MoveToPoint(sx, sy)
+            path.AddCurveToPoint(mid, sy, mid, dy, dx, dy)
+            gc.StrokePath(path)
+
+        for node in self._nodes.values():
+            self._draw_node(gc, node, z)
+
+    # ── gate body shapes ────────────────────────────────────────────────────
+
+    def _draw_and_body(self, gc, x, y, w, h, z, negate):
+        """D-shaped AND body; bubble at output for NAND."""
+        k = 0.5523
+        r = h / 2
+        mx = w * 0.5
+        path = gc.CreatePath()
+        path.MoveToPoint(x, y)
+        path.AddLineToPoint(x + mx, y)
+        path.AddCurveToPoint(x + mx + k * r, y,    x + w, y + r - k * r, x + w, y + r)
+        path.AddCurveToPoint(x + w, y + r + k * r, x + mx + k * r, y + h, x + mx, y + h)
+        path.AddLineToPoint(x, y + h)
+        path.CloseSubpath()
+        gc.DrawPath(path)
+        if negate:
+            br = min(5.0, h / 8)
+            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(210, 210, 240))))
+            gc.DrawEllipse(x + w - br, y + r - br, br * 2, br * 2)
+
+    def _draw_or_body(self, gc, x, y, w, h, z, negate):
+        """Pointed OR body; bubble at output for NOR."""
+        back = w * 0.22
+        path = gc.CreatePath()
+        path.MoveToPoint(x, y)
+        path.AddCurveToPoint(x + w * 0.50, y,           x + w * 0.90, y + h * 0.15, x + w, y + h * 0.5)
+        path.AddCurveToPoint(x + w * 0.90, y + h * 0.85, x + w * 0.50, y + h,       x, y + h)
+        path.AddCurveToPoint(x + back, y + h * 0.70, x + back, y + h * 0.30, x, y)
+        path.CloseSubpath()
+        gc.DrawPath(path)
+        if negate:
+            br = min(5.0, h / 8)
+            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(210, 210, 240))))
+            gc.DrawEllipse(x + w - br, y + h / 2 - br, br * 2, br * 2)
+
+    def _draw_xor_body(self, gc, x, y, w, h, z):
+        """OR body plus an interior arc on the input side (XOR marking)."""
+        self._draw_or_body(gc, x, y, w, h, z, negate=False)
+        back = w * 0.22
+        xoff = 10
+        extra = gc.CreatePath()
+        extra.MoveToPoint(x + xoff, y + 2)
+        extra.AddCurveToPoint(
+            x + back + xoff, y + h * 0.30,
+            x + back + xoff, y + h * 0.70,
+            x + xoff, y + h - 2,
+        )
+        gc.StrokePath(extra)
+
+    # ── node rendering ───────────────────────────────────────────────────────
+
+    def _draw_node(self, gc, node, z):
+        x, y, w, h = node["x"], node["y"], node["w"], node["h"]
+        kind = node["kind"]
+        bg      = self._BG.get(kind, self._BG["UNKNOWN"])
+        outline = self._OUTLINE_COL.get(kind, self._OUTLINE_COL["UNKNOWN"])
+
+        gc.SetBrush(gc.CreateBrush(wx.Brush(bg)))
+        gc.SetPen(gc.CreatePen(wx.GraphicsPenInfo(outline).Width(1.5 / z)))
+
+        if kind in ("AND", "NAND"):
+            self._draw_and_body(gc, x, y, w, h, z, negate=(kind == "NAND"))
+        elif kind in ("OR", "NOR"):
+            self._draw_or_body(gc, x, y, w, h, z, negate=(kind == "NOR"))
+        elif kind == "XOR":
+            self._draw_xor_body(gc, x, y, w, h, z)
+        else:
+            gc.DrawRoundedRectangle(x, y, w, h, 5)
+
+        # Gate type label
+        gc.SetFont(
+            wx.Font(8, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD),
+            wx.Colour(200, 225, 255),
+        )
+        gc.DrawText(node["short"], x + 5, y + 3)
+
+        # Signal name (truncated)
+        label = node["label"]
+        if len(label) > 11:
+            label = label[:10] + "…"
+        gc.SetFont(
+            wx.Font(7, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL),
+            wx.Colour(150, 185, 215),
+        )
+        gc.DrawText(label, x + 5, y + 15)
+
+        stub_pen = gc.CreatePen(
+            wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
+        )
+        lbl_font = wx.Font(6, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+
+        # Input stubs
+        in_ports = node["in_ports"]
+        n_in = len(in_ports)
+        for i, pid in enumerate(in_ports):
+            py = y + (i + 1) * h / (n_in + 1)
+            gc.SetPen(stub_pen)
+            gc.StrokeLine(x - 10, py, x, py)
+            pname = (
+                (self._names.get_pretty_name(pid) or "")
+                if pid is not None
+                else ""
+            )
+            if pname:
+                gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
+                gc.DrawText(pname[:5], x + 3, py - 9)
+
+        # Output stubs
+        out_ports = node["out_ports"]
+        n_out = len(out_ports)
+        for i, pid in enumerate(out_ports):
+            py = y + (i + 1) * h / (n_out + 1)
+            gc.SetPen(stub_pen)
+            gc.StrokeLine(x + w, py, x + w + 10, py)
+            pname = (
+                (self._names.get_pretty_name(pid) or "")
+                if pid is not None
+                else ""
+            )
+            if pname:
+                gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
+                gc.DrawText(pname[:5], x + w - 18, py - 9)
+
+        # Clock triangle on the CLK input of a flip-flop
+        if kind == "DTYPE" and n_in > 0:
+            for i, pid in enumerate(in_ports):
+                pname = (
+                    (self._names.get_pretty_name(pid) or "")
+                    if pid is not None
+                    else ""
+                )
+                if "CLK" in pname.upper():
+                    py = y + (i + 1) * h / (n_in + 1)
+                    gc.SetPen(
+                        gc.CreatePen(
+                            wx.GraphicsPenInfo(wx.Colour(220, 200, 80)).Width(
+                                1.0 / z
+                            )
+                        )
+                    )
+                    gc.SetBrush(wx.TRANSPARENT_BRUSH)
+                    path = gc.CreatePath()
+                    path.MoveToPoint(x + 2, py - 5)
+                    path.AddLineToPoint(x + 9, py)
+                    path.AddLineToPoint(x + 2, py + 5)
+                    path.CloseSubpath()
+                    gc.StrokePath(path)
+                    break
 
 
 class Gui(wx.Frame):
@@ -1041,6 +1427,18 @@ class Gui(wx.Frame):
         self._view_3d_btn.Bind(wx.EVT_TOGGLEBUTTON, self._on_toggle_3d)
         x_zoom_row.Add(
             self._view_3d_btn,
+            0,
+            wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT,
+            6,
+        )
+
+        self._logic_viewer_btn = wx.Button(
+            self.canvas_panel, label=_("Logic Viewer"), size=(-1, 26)
+        )
+        self._logic_viewer_btn.SetToolTip(_("Show gate-level circuit diagram"))
+        self._logic_viewer_btn.Bind(wx.EVT_BUTTON, self._on_logic_viewer)
+        x_zoom_row.Add(
+            self._logic_viewer_btn,
             0,
             wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT,
             6,
@@ -1242,7 +1640,9 @@ class Gui(wx.Frame):
 
         monitor_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         monitor_btn_sizer.Add(self.add_monitor_btn, 1, wx.EXPAND | wx.ALL, 2)
-        monitor_btn_sizer.Add(self.remove_monitor_btn, 1, wx.EXPAND | wx.ALL, 2)
+        monitor_btn_sizer.Add(
+            self.remove_monitor_btn, 1, wx.EXPAND | wx.ALL, 2
+        )
         monitor_btn_sizer.Add(self.monitor_up_btn, 1, wx.EXPAND | wx.ALL, 2)
         monitor_btn_sizer.Add(self.monitor_down_btn, 1, wx.EXPAND | wx.ALL, 2)
         monitor_sizer.Add(
@@ -1331,7 +1731,9 @@ class Gui(wx.Frame):
         # Initialise scrollbar state
         self.update_scrollbars()
         self._switch_col_ratio = 0.5
-        self._nonmonitored_order = None  # persistent display order for inactive signals
+        self._nonmonitored_order = (
+            None  # persistent display order for inactive signals
+        )
         self.update_switch_list()
         self.update_monitors_list()
 
@@ -1673,6 +2075,19 @@ class Gui(wx.Frame):
         else:
             self.canvas.render()
 
+    def _on_logic_viewer(self, event):
+        """Open the gate-level schematic dialog."""
+        if not self.devices.find_devices():
+            wx.MessageBox(
+                _("Please implement a circuit file first."),
+                _("No Circuit"),
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return
+        dlg = LogicViewerDialog(self, self.devices, self.network, self.names)
+        dlg.ShowModal()
+        dlg.Destroy()
+
     def _on_toggle_3d(self, event):
         """Switch between the 2D and 3D signal views."""
         self._is_3d = event.GetInt() == 1
@@ -1775,7 +2190,8 @@ class Gui(wx.Frame):
 
         # Build a lookup for non-monitored signals so we can apply the stored order.
         nm_dict = {
-            clean_name: raw_name for clean_name, raw_name in non_monitored_signals
+            clean_name: raw_name
+            for clean_name, raw_name in non_monitored_signals
         }
         if self._nonmonitored_order is None:
             self._nonmonitored_order = list(nm_dict.keys())
