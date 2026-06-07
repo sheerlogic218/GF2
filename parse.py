@@ -127,37 +127,42 @@ class Parser:
 
     def parse_network(self):
         """Parse the circuit definition file."""
-        # get first symbol
-        self.next_symbol()
-        last_module = None
+        try:
+            # get first symbol
+            self.next_symbol()
+            last_module = None
 
-        while self.symbol.type != Symbol.EOF:
-            self.parse_prog_defn()
-            last_module = self.current_module_name
+            while self.symbol.type != Symbol.EOF:
+                self.parse_prog_defn()
+                last_module = self.current_module_name
 
-        # load the last module
-        if last_module and self.error_count == 0:
-            self.instantiate_module(last_module, "Main", [], [])
+            # load the last module
+            if last_module and self.error_count == 0:
+                self.instantiate_module(last_module, "Main", [], [])
 
-        # Explicit unconnected input check
-        if self.error_count == 0:
-            unconnected = []
-            for device_id in self.devices.find_devices():
-                device = self.devices.get_device(device_id)
-                for input_id in device.inputs:
-                    if (
-                        self.network.get_connected_output(device_id, input_id)
-                        is None
-                    ):
-                        dev_name = self.names.get_pretty_name(device_id)
-                        port_name = self.names.get_pretty_name(input_id)
-                        unconnected.append(f"{dev_name}.{port_name}")
+            # Explicit unconnected input check
+            if self.error_count == 0:
+                unconnected = []
+                for device_id in self.devices.find_devices():
+                    device = self.devices.get_device(device_id)
+                    for input_id in device.inputs:
+                        if (
+                            self.network.get_connected_output(device_id, input_id)
+                            is None
+                        ):
+                            dev_name = self.names.get_pretty_name(device_id)
+                            port_name = self.names.get_pretty_name(input_id)
+                            unconnected.append(f"{dev_name}.{port_name}")
 
-            if unconnected:
-                self.errors.append(
-                    f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
-                )
-                self.error_count += 1
+                if unconnected:
+                    self.errors.append(
+                        f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
+                    )
+                    self.error_count += 1
+        except SyntaxError:
+            # next_symbol() raises SyntaxError for invalid characters and has
+            # already appended the error message to self.errors.
+            pass
         # no errors, returns True
         return self.error_count == 0
 
