@@ -941,39 +941,38 @@ class LogicViewerDialog(wx.Dialog):
     _NODE_MIN_W = 96
     _NODE_MAX_W = 230
     _WIRE_MIN_W = 60
-    _ROW_GAP = 22
+    _ROW_GAP = 28  # vertical room between rows
     _LAYER_GAP = 96  # horizontal space between columns (room for wires)
     _PAD = 50
-    _HEADER_H = 28  # top band reserved for the gate name + signal label
     _PORT_ROW_H = 22  # vertical room each input/output port needs
 
-    _BG = {
-        "AND": wx.Colour(25, 55, 95),
-        "OR": wx.Colour(20, 70, 50),
-        "NAND": wx.Colour(75, 25, 75),
-        "NOR": wx.Colour(75, 45, 20),
-        "XOR": wx.Colour(20, 70, 75),
-        "NOT": wx.Colour(65, 20, 85),
-        "CLOCK": wx.Colour(75, 70, 15),
-        "SWITCH": wx.Colour(50, 70, 25),
-        "DTYPE": wx.Colour(75, 35, 15),
-        "WIRE": wx.Colour(30, 35, 45),
-        "UNKNOWN": wx.Colour(55, 55, 55),
-    }
+    # Conventional schematic look: a light grey gate body with a black
+    # outline on the white canvas, and the gate name in black text inside.
+    _FILL = wx.Colour(228, 231, 236)
+    _OUTLINE = wx.Colour(0, 0, 0)
+    _TEXT = wx.Colour(15, 15, 15)
+    _kinds = (
+        "AND", "OR", "NAND", "NOR", "XOR", "NOT",
+        "CLOCK", "SWITCH", "DTYPE", "WIRE", "UNKNOWN",
+    )
+    # dict.fromkeys (not a comprehension) so the class-scope colours resolve.
+    _BG = dict.fromkeys(_kinds, _FILL)
+    _OUTLINE_COL = dict.fromkeys(_kinds, _OUTLINE)
 
-    _OUTLINE_COL = {
-        "AND": wx.Colour(100, 170, 255),
-        "OR": wx.Colour(80, 200, 140),
-        "NAND": wx.Colour(200, 100, 200),
-        "NOR": wx.Colour(220, 140, 80),
-        "XOR": wx.Colour(80, 200, 210),
-        "NOT": wx.Colour(190, 90, 230),
-        "CLOCK": wx.Colour(220, 200, 80),
-        "SWITCH": wx.Colour(130, 200, 80),
-        "DTYPE": wx.Colour(220, 140, 80),
-        "WIRE": wx.Colour(80, 110, 150),
-        "UNKNOWN": wx.Colour(140, 140, 140),
+    # Fraction of the box width usable for the (centred) inside label, chosen
+    # to keep text clear of each shape's curved/pointed edges.
+    _TEXT_WINDOW = {
+        "AND": (0.06, 0.70),
+        "NAND": (0.06, 0.66),
+        "OR": (0.20, 0.74),
+        "NOR": (0.20, 0.70),
+        "XOR": (0.24, 0.74),
+        "NOT": (0.06, 0.60),
+        "CLOCK": (0.10, 0.90),
+        "SWITCH": (0.10, 0.90),
+        "UNKNOWN": (0.10, 0.90),
     }
+    _COMMUTATIVE = ("AND", "NAND", "OR", "NOR", "XOR")
 
     def __init__(self, parent, devices, network, names):
         super().__init__(
@@ -991,7 +990,7 @@ class LogicViewerDialog(wx.Dialog):
         self._pan_anchor = None  # (mouse_x, mouse_y, scroll_x, scroll_y)
 
         self._scroll = wx.ScrolledWindow(self, style=wx.HSCROLL | wx.VSCROLL)
-        self._scroll.SetBackgroundColour(wx.Colour(18, 22, 30))
+        self._scroll.SetBackgroundColour(wx.Colour(255, 255, 255))
         self._scroll.Bind(wx.EVT_PAINT, self._on_paint)
         self._scroll.Bind(wx.EVT_MOUSEWHEEL, self._on_wheel)
         # Left-drag to pan the schematic.
@@ -1104,6 +1103,52 @@ class LogicViewerDialog(wx.Dialog):
                         self._edges.append((src_id, src_port, dev_id, inp_id))
 
         self._collapse_wire_nodes()
+        self._merge_inverters_into_gates()
+
+    def _merge_inverters_into_gates(self):
+        """Fold an inverter on a gate's output into a negated gate.
+
+        If an AND/OR gate feeds *only* a NOT (inverter), the pair is drawn as a
+        single NAND/NOR: the source gate is negated and the NOT node removed,
+        its downstream connections re-driven from the (now negated) gate. The
+        sole-consumer check keeps the un-inverted signal correct if it is also
+        used elsewhere (in which case nothing is merged).
+        """
+        negate = {"AND": "NAND", "OR": "NOR"}
+        changed = True
+        while changed:
+            changed = False
+            for nid in list(self._nodes.keys()):
+                node = self._nodes.get(nid)
+                if node is None or node["kind"] != "NOT":
+                    continue
+                in_edges = [e for e in self._edges if e[2] == nid]
+                if len(in_edges) != 1:
+                    continue
+                src_id, src_port, _, _ = in_edges[0]
+                src = self._nodes.get(src_id)
+                if src is None or src["kind"] not in negate:
+                    continue
+                # The source gate's output must feed only this inverter.
+                if len([e for e in self._edges if e[0] == src_id]) != 1:
+                    continue
+
+                new_kind = negate[src["kind"]]
+                src["kind"] = new_kind
+                src["short"] = new_kind
+
+                not_out = [e for e in self._edges if e[0] == nid]
+                self._edges = [
+                    e for e in self._edges if e[0] != nid and e[2] != nid
+                ]
+                del self._nodes[nid]
+                for _, _, dst_id, dst_port in not_out:
+                    if dst_id in self._nodes:
+                        self._edges.append(
+                            (src_id, src_port, dst_id, dst_port)
+                        )
+                changed = True
+                break
 
     def _collapse_wire_nodes(self):
         """Remove pass-through WIRE (1-input AND buffer) nodes from the graph.
@@ -1189,16 +1234,21 @@ class LogicViewerDialog(wx.Dialog):
                 node["h"] = 26
                 continue
 
-            header_w = max(sw, lw) + 16
-            port_w = (left_w + right_w + 22) if (left_w or right_w) else 0
-            w = max(self._NODE_MIN_W, header_w, port_w)
+            text_need = max(sw, lw)
+            if node["kind"] == "DTYPE":
+                # Name sits above; width is driven by the internal port labels.
+                port_w = left_w + right_w + 26
+                w = max(self._NODE_MIN_W, port_w, text_need + 12)
+            else:
+                # The inside label only gets a fraction of the box width, so
+                # widen the box to keep names legible within that window.
+                left, right = self._TEXT_WINDOW.get(node["kind"], (0.10, 0.90))
+                frac = max(0.2, right - left)
+                w = max(self._NODE_MIN_W, int(text_need / frac) + 10)
             node["w"] = int(min(w, self._NODE_MAX_W))
 
-            # Header band on top, then one row of vertical room per port below.
             n_rows = max(len(node["in_ports"]), len(node["out_ports"]), 1)
-            node["h"] = int(
-                max(54, self._HEADER_H + n_rows * self._PORT_ROW_H + 6)
-            )
+            node["h"] = int(max(54, n_rows * self._PORT_ROW_H + 12))
 
     # ── layout ──────────────────────────────────────────────────────────────
 
@@ -1301,6 +1351,35 @@ class LogicViewerDialog(wx.Dialog):
         for nid, node in self._nodes.items():
             node["x"] = layer_x[node["layer"]]
 
+        # 6. Assign each commutative gate's input slots in the vertical order
+        #    of their sources, removing avoidable crossings right at the gate.
+        self._order_gate_inputs()
+
+    def _order_gate_inputs(self):
+        """Reorder commutative-gate inputs so a higher source enters a higher
+        slot. Gate inputs are interchangeable, so this never changes behaviour
+        but straightens the wires feeding each gate.
+        """
+        src_of = {}
+        for src, _sp, dst, dp in self._edges:
+            src_of.setdefault(dst, {})[dp] = src
+
+        for nid, node in self._nodes.items():
+            if node["kind"] not in self._COMMUTATIVE:
+                continue
+            if len(node["in_ports"]) < 2:
+                continue
+            feeders = src_of.get(nid, {})
+
+            def slot_key(pid):
+                s = feeders.get(pid)
+                if s is None or s not in self._nodes:
+                    return float("inf")  # unconnected inputs sink to the bottom
+                sn = self._nodes[s]
+                return sn["y"] + sn["h"] / 2.0
+
+            node["in_ports"] = sorted(node["in_ports"], key=slot_key)
+
     def _resolve_overlaps(self, nids):
         """Push nodes (already in vertical order) apart to remove overlap."""
         for i in range(1, len(nids)):
@@ -1376,22 +1455,43 @@ class LogicViewerDialog(wx.Dialog):
     # ── drawing ─────────────────────────────────────────────────────────────
 
     def _port_y(self, node, port_id, side):
-        """Y offset of a port within the node box.
-
-        Ports are distributed over the body *below* the header band so their
-        labels never overlap the gate name / signal label drawn at the top.
-        """
+        """Y offset of a port, distributed evenly down the box edge."""
         ports = node["in_ports"] if side == "in" else node["out_ports"]
         n = len(ports)
-        top = 0 if node["kind"] == "WIRE" else self._HEADER_H
-        span = node["h"] - top
         if n == 0:
-            return top + span / 2
+            return node["h"] / 2
         try:
             idx = ports.index(port_id)
         except ValueError:
-            return top + span / 2
-        return top + (idx + 1) * span / (n + 1)
+            return node["h"] / 2
+        return (idx + 1) * node["h"] / (n + 1)
+
+    # Single-output gate shapes whose output emerges from the vertical middle.
+    _MIDDLE_OUT = ("AND", "NAND", "OR", "NOR", "XOR", "NOT")
+
+    def _out_stub_x(self, node):
+        """X of a node's output point (the gate tip / bubble edge)."""
+        x, w, kind, h = node["x"], node["w"], node["kind"], node["h"]
+        br = min(5.0, h / 8)
+        if kind == "NOT":
+            return x + w * 0.76 + br  # just past the inverter bubble
+        if kind in ("NAND", "NOR"):
+            return x + w + br  # just past the negation bubble
+        return x + w
+
+    def _out_y(self, node, pid):
+        """Y of an output port: middle for gate shapes, distributed otherwise."""
+        if node["kind"] in self._MIDDLE_OUT:
+            return node["y"] + node["h"] / 2
+        return node["y"] + self._port_y(node, pid, "out")
+
+    def _in_anchor(self, node, pid):
+        """(x, y) where an input wire attaches (outer tip of the input stub)."""
+        return node["x"] - 10, node["y"] + self._port_y(node, pid, "in")
+
+    def _out_anchor(self, node, pid):
+        """(x, y) where an output wire attaches (outer tip of the output stub)."""
+        return self._out_stub_x(node) + 10, self._out_y(node, pid)
 
     def _on_paint(self, event):
         dc = wx.PaintDC(self._scroll)
@@ -1410,7 +1510,7 @@ class LogicViewerDialog(wx.Dialog):
                     wx.FONTSTYLE_NORMAL,
                     wx.FONTWEIGHT_NORMAL,
                 ),
-                wx.Colour(160, 160, 160),
+                wx.Colour(90, 90, 90),
             )
             gc.DrawText(_("No circuit implemented yet."), self._PAD, self._PAD)
             return
@@ -1418,7 +1518,7 @@ class LogicViewerDialog(wx.Dialog):
         # Wires (drawn beneath nodes), routed between the port stub tips and
         # drawn semi-transparent so overlapping runs stay legible.
         wire_pen = gc.CreatePen(
-            wx.GraphicsPenInfo(wx.Colour(80, 160, 230, 190)).Width(1.5 / z)
+            wx.GraphicsPenInfo(wx.Colour(40, 90, 170, 210)).Width(1.6 / z)
         )
         gc.SetPen(wire_pen)
         for src_id, src_port, dst_id, dst_port in self._edges:
@@ -1426,10 +1526,8 @@ class LogicViewerDialog(wx.Dialog):
             dn = self._nodes.get(dst_id)
             if sn is None or dn is None:
                 continue
-            sx = sn["x"] + sn["w"] + 10  # output stub tip
-            sy = sn["y"] + self._port_y(sn, src_port, "out")
-            dx = dn["x"] - 10  # input stub tip
-            dy = dn["y"] + self._port_y(dn, dst_port, "in")
+            sx, sy = self._out_anchor(sn, src_port)  # output point (mid/tip)
+            dx, dy = self._in_anchor(dn, dst_port)  # input stub tip
             # Horizontal control points give a smooth S-curve that leaves and
             # arrives horizontally, matching the stub direction.
             c1 = sx + max(24, (dx - sx) * 0.5)
@@ -1463,7 +1561,7 @@ class LogicViewerDialog(wx.Dialog):
         gc.DrawPath(path)
         if negate:
             br = min(5.0, h / 8)
-            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(210, 210, 240))))
+            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(255, 255, 255))))
             gc.DrawEllipse(x + w - br, y + r - br, br * 2, br * 2)
 
     def _draw_or_body(self, gc, x, y, w, h, z, negate):
@@ -1484,7 +1582,7 @@ class LogicViewerDialog(wx.Dialog):
         gc.DrawPath(path)
         if negate:
             br = min(5.0, h / 8)
-            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(210, 210, 240))))
+            gc.SetBrush(gc.CreateBrush(wx.Brush(wx.Colour(255, 255, 255))))
             gc.DrawEllipse(x + w - br, y + h / 2 - br, br * 2, br * 2)
 
     def _draw_xor_body(self, gc, x, y, w, h, z):
@@ -1540,10 +1638,17 @@ class LogicViewerDialog(wx.Dialog):
         gc.SetBrush(gc.CreateBrush(wx.Brush(bg)))
         gc.SetPen(gc.CreatePen(wx.GraphicsPenInfo(outline).Width(1.5 / z)))
 
+        def pretty(pid):
+            return (
+                (self._names.get_pretty_name(pid) or "")
+                if pid is not None
+                else ""
+            )
+
         if kind == "WIRE":
             # Pill-shaped terminal for named wires / output buffers
             gc.DrawRoundedRectangle(x, y, w, h, h / 2)
-            gc.SetFont(self._font(7), wx.Colour(180, 210, 240))
+            gc.SetFont(self._font(7), wx.Colour(30, 30, 30))
             gc.DrawText(
                 self._fit_text(gc, node["label"], w - 12), x + 6, y + 6
             )
@@ -1559,68 +1664,81 @@ class LogicViewerDialog(wx.Dialog):
             else:
                 gc.DrawRoundedRectangle(x, y, w, h, 5)
 
-            # Gate type label (bold) + signal name, fitted to the box width.
-            gc.SetFont(self._font(8, bold=True), wx.Colour(200, 225, 255))
-            gc.DrawText(
-                self._fit_text(gc, node["short"], w - 12), x + 5, y + 3
-            )
-            gc.SetFont(self._font(7), wx.Colour(150, 185, 215))
-            gc.DrawText(
-                self._fit_text(gc, node["label"], w - 12), x + 5, y + 15
-            )
+            if kind == "DTYPE":
+                # The body is full of port labels, so the D-type's name sits
+                # above the box (gate type) with the signal name below it.
+                if node["short"]:
+                    gc.SetFont(self._font(8, bold=True), self._TEXT)
+                    tw = gc.GetTextExtent(node["short"])[0]
+                    gc.DrawText(node["short"], x + (w - tw) / 2, y - 15)
+                if node["label"]:
+                    gc.SetFont(self._font(7), wx.Colour(70, 70, 70))
+                    lbl = self._fit_text(gc, node["label"], w + 60)
+                    lw = gc.GetTextExtent(lbl)[0]
+                    gc.DrawText(lbl, x + (w - lw) / 2, y + h + 3)
+            else:
+                # Gate type + signal name centred INSIDE the body, within the
+                # shape's clear window so text never touches the OR/XOR edge.
+                left, right = self._TEXT_WINDOW.get(kind, (0.10, 0.90))
+                win = w * (right - left)
+                cx = x + w * left + win / 2
+                both = bool(node["short"]) and bool(node["label"])
+                if node["short"]:
+                    gc.SetFont(self._font(8, bold=True), self._TEXT)
+                    s = self._fit_text(gc, node["short"], win)
+                    sw2 = gc.GetTextExtent(s)[0]
+                    gc.DrawText(s, cx - sw2 / 2, y + h / 2 - (13 if both else 6))
+                if node["label"]:
+                    gc.SetFont(self._font(7), wx.Colour(60, 60, 60))
+                    lab = self._fit_text(gc, node["label"], win)
+                    lw2 = gc.GetTextExtent(lab)[0]
+                    gc.DrawText(lab, cx - lw2 / 2, y + h / 2 - (1 if both else 6))
 
         stub_pen = gc.CreatePen(
-            wx.GraphicsPenInfo(wx.Colour(70, 150, 220)).Width(1.5 / z)
+            wx.GraphicsPenInfo(wx.Colour(0, 0, 0)).Width(1.4 / z)
         )
         lbl_font = self._font(6)
+        port_col = wx.Colour(40, 40, 40)  # dark label on the light body
 
-        # Input stubs (labels drawn just inside the left edge)
+        # Input stubs. Generic gate inputs (I1, I2 …) are left unlabelled — the
+        # incoming wire already carries the real signal name; only the D-type's
+        # meaningful port names (CLK/SET/CLEAR/DATA) are drawn.
         in_ports = node["in_ports"]
         n_in = len(in_ports)
-        for i, pid in enumerate(in_ports):
+        for pid in in_ports:
             py = y + self._port_y(node, pid, "in")
             gc.SetPen(stub_pen)
             gc.StrokeLine(x - 10, py, x, py)
-            pname = (
-                (self._names.get_pretty_name(pid) or "")
-                if pid is not None
-                else ""
-            )
-            if pname:
-                gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
+            pname = pretty(pid)
+            if pname and kind == "DTYPE":
+                gc.SetFont(lbl_font, port_col)
                 gc.DrawText(pname, x + 4, py - 9)
 
-        # Output stubs (labels right-aligned just inside the right edge)
+        # Output stubs leave from the gate's output point (vertical middle for
+        # gate shapes, beside the inverter/negation bubble), so wires come out
+        # of the middle of the gate.
         out_ports = node["out_ports"]
-        n_out = len(out_ports)
-        for i, pid in enumerate(out_ports):
-            py = y + self._port_y(node, pid, "out")
+        ox = self._out_stub_x(node)
+        for pid in out_ports:
+            py = self._out_y(node, pid)
             gc.SetPen(stub_pen)
-            gc.StrokeLine(x + w, py, x + w + 10, py)
-            pname = (
-                (self._names.get_pretty_name(pid) or "")
-                if pid is not None
-                else ""
-            )
-            if pname:
-                gc.SetFont(lbl_font, wx.Colour(120, 155, 190))
+            gc.StrokeLine(ox, py, ox + 10, py)
+            pname = pretty(pid)
+            if pname and kind == "DTYPE":
+                gc.SetFont(lbl_font, port_col)
                 tw = gc.GetTextExtent(pname)[0]
                 gc.DrawText(pname, x + w - tw - 4, py - 9)
 
         # Clock triangle on the CLK input of a flip-flop
         if kind == "DTYPE" and n_in > 0:
-            for i, pid in enumerate(in_ports):
-                pname = (
-                    (self._names.get_pretty_name(pid) or "")
-                    if pid is not None
-                    else ""
-                )
+            for pid in in_ports:
+                pname = pretty(pid)
                 if "CLK" in pname.upper():
                     py = y + self._port_y(node, pid, "in")
                     gc.SetPen(
                         gc.CreatePen(
-                            wx.GraphicsPenInfo(wx.Colour(220, 200, 80)).Width(
-                                1.0 / z
+                            wx.GraphicsPenInfo(wx.Colour(0, 0, 0)).Width(
+                                1.2 / z
                             )
                         )
                     )
