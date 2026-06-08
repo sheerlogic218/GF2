@@ -48,6 +48,7 @@ TRANSLATIONS_FR = {
     "Save": "Enregistrer",
     "Implement": "Implémenter",
     "File Viewer": "Visionneuse",
+    "Skip": "Passer",
 
     # ── Logic Viewer ─────────────────────────────────────────────────────────
     "Logic Viewer": "Visionneuse logique",
@@ -69,6 +70,10 @@ TRANSLATIONS_FR = {
         "Poursuivre la simulation pour %d cycles supplémentaires",
     "Reset the simulation to its initial state":
         "Réinitialiser la simulation à son état initial",
+    "Skip the trace drawing animation":
+        "Passer l'animation du tracé",
+    "Trace drawing animation speed":
+        "Vitesse de l'animation du tracé",
     "Click a switch to select it, then use ON / OFF":
         "Cliquez sur un commutateur pour le sélectionner, "
         "puis utilisez Marche / Arrêt",

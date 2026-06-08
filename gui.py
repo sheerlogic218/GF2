@@ -75,6 +75,18 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self._play_button_center = None
         self._play_button_radius = 0
 
+        # Progressive "draw the trace over time" animation state.
+        # _anim_reveal is the number of cycles currently revealed (a moving
+        # playhead sweeps left to right); None means "show the full trace".
+        # The per-tick advance is _anim_base_step * _anim_speed, so the speed
+        # multiplier can be changed live while the trace is being drawn.
+        self._anim_reveal = None
+        self._anim_total = None
+        self._anim_base_step = 1.0
+        self._anim_speed = 1.0
+        self._anim_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_anim_tick, self._anim_timer)
+
         # Initialise variables for zooming
         self.zoom = 1.0
         self.x_zoom = 1.0
@@ -209,6 +221,16 @@ class MyGLCanvas(wxcanvas.GLCanvas):
             self.SwapBuffers()
             return
 
+        # Progressive draw: resolve the playhead x-limit for this frame. On the
+        # first frame after a run, latch the total cycle count + per-tick step.
+        x_limit = None
+        if self._anim_reveal is not None:
+            if self._anim_total is None:
+                self._anim_total = num_cycles
+                # Base pace ≈ 4 s for the full sweep at 1× (≈130 ticks @ 30 ms).
+                self._anim_base_step = max(0.2, num_cycles / 130.0)
+            x_limit = box_x_start + self._anim_reveal * cycle_width
+
         # 4. Dynamic Multi-Row Channel Rendering Loop
         row_height = (box_y_top - box_y_bot) / num_monitors
         for k, ((device_id, output_id), signal_list) in enumerate(
@@ -267,6 +289,16 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glLineWidth(2.5)
                 GL.glBegin(GL.GL_LINES)
                 for x1, y1, x2, y2 in trace_segments:
+                    if x_limit is not None:
+                        if x1 > x_limit:
+                            continue
+                        if x2 > x_limit:
+                            if y1 == y2:
+                                # Horizontal level: safe to clip at the playhead.
+                                x2 = x_limit
+                            else:
+                                # Diagonal edge: reveal only once fully passed.
+                                continue
                     GL.glVertex2f(x1, y1)
                     GL.glVertex2f(x2, y2)
                 GL.glEnd()
@@ -280,6 +312,19 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 GL.glVertex2f(box_x_start, channel_divider_y)
                 GL.glVertex2f(actual_box_x_end, channel_divider_y)
                 GL.glEnd()
+
+        # Draw the moving playhead at the animation frontier.
+        if x_limit is not None and x_limit <= actual_box_x_end:
+            GL.glColor3f(0.9, 1.0, 0.6)
+            GL.glLineWidth(1.5)
+            GL.glEnable(GL.GL_LINE_STIPPLE)
+            GL.glLineStipple(1, 0xF0F0)
+            GL.glBegin(GL.GL_LINES)
+            GL.glVertex2f(x_limit, box_y_bot)
+            GL.glVertex2f(x_limit, box_y_top)
+            GL.glEnd()
+            GL.glDisable(GL.GL_LINE_STIPPLE)
+            GL.glLineWidth(1.0)
 
         # Draw drag-to-reorder insertion indicator
         if (
@@ -434,6 +479,58 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         return (screen_x - cx) ** 2 + (
             screen_y - cy
         ) ** 2 <= self._play_button_radius**2
+
+    # ── Progressive trace animation ──────────────────────────────────────────
+
+    def start_animation(self):
+        """Begin sweeping the green trace in from the left over time.
+
+        The displayed cycle count and per-tick step are latched lazily on the
+        first render frame, so this works regardless of how many cycles run.
+        """
+        self._anim_reveal = 0.0
+        self._anim_total = None
+        self.init = False
+        self.Refresh()
+        self._anim_timer.Start(30)
+
+    def skip_animation(self):
+        """Jump straight to the fully drawn trace."""
+        if self._anim_timer.IsRunning():
+            self._anim_timer.Stop()
+        self._anim_reveal = None
+        self._anim_total = None
+        self.init = False
+        self.Refresh()
+
+    def is_animating(self):
+        """Return True while the trace is still being drawn in."""
+        return self._anim_reveal is not None
+
+    def set_animation_speed(self, multiplier):
+        """Set the playback speed multiplier (e.g. 0.5, 1, 2, 5).
+
+        Takes effect immediately, even mid-animation.
+        """
+        if multiplier > 0:
+            self._anim_speed = float(multiplier)
+
+    def _on_anim_tick(self, event):
+        """Advance the playhead one step and request a repaint."""
+        if self._anim_reveal is None:
+            self._anim_timer.Stop()
+            return
+        # Wait for the first render to latch the total before advancing.
+        if self._anim_total is None:
+            self.Refresh()
+            return
+        self._anim_reveal += self._anim_base_step * self._anim_speed
+        if self._anim_reveal >= self._anim_total:
+            self._anim_reveal = None
+            self._anim_total = None
+            self._anim_timer.Stop()
+        self.init = False
+        self.Refresh()
 
     def on_paint(self, event):
         """Handle the paint event by validating the DC and calling render."""
@@ -2216,6 +2313,23 @@ class Gui(wx.Frame):
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
         )
         self.reset_button = wx.Button(sim_pane, wx.ID_ANY, "↺", size=(32, 28))
+        self.skip_button = wx.Button(
+            sim_pane, wx.ID_ANY, _("Skip"), size=(48, 28)
+        )
+        # Animation speed selector for the progressive trace drawing.
+        self._anim_speeds = [
+            ("0.5x", 0.5),
+            ("1x", 1.0),
+            ("2x", 2.0),
+            ("5x", 5.0),
+        ]
+        self.speed_choice = wx.Choice(
+            sim_pane,
+            wx.ID_ANY,
+            choices=[label for label, _mult in self._anim_speeds],
+            size=(60, 28),
+        )
+        self.speed_choice.SetSelection(1)  # default 1x
 
         self.switch_label = wx.StaticText(
             switch_pane, wx.ID_ANY, _("Select switch:")
@@ -2271,6 +2385,8 @@ class Gui(wx.Frame):
         self.reset_button.SetToolTip(
             _("Reset the simulation to its initial state")
         )
+        self.skip_button.SetToolTip(_("Skip the trace drawing animation"))
+        self.speed_choice.SetToolTip(_("Trace drawing animation speed"))
         self.switch_list.SetToolTip(
             _("Click a switch to select it, then use ON / OFF")
         )
@@ -2306,6 +2422,8 @@ class Gui(wx.Frame):
         self.monitor_up_btn.Bind(wx.EVT_BUTTON, self.on_monitor_move_up)
         self.monitor_down_btn.Bind(wx.EVT_BUTTON, self.on_monitor_move_down)
         self.reset_button.Bind(wx.EVT_BUTTON, self.on_reset_button)
+        self.skip_button.Bind(wx.EVT_BUTTON, self.on_skip_animation)
+        self.speed_choice.Bind(wx.EVT_CHOICE, self.on_speed_change)
         self.Bind(wx.EVT_MENU, self.on_help_menu, id=wx.ID_HELP)
 
         # ── Sizers and Structural Layout ────────────────────────────────────
@@ -2342,6 +2460,21 @@ class Gui(wx.Frame):
             sim_btn_sizer,
             0,
             wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM,
+            3,
+        )
+
+        # Animation controls row: Skip + speed multiplier, under the buttons.
+        sim_anim_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sim_anim_sizer.Add(
+            self.skip_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_anim_sizer.Add(
+            self.speed_choice, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 2
+        )
+        sim_sizer.Add(
+            sim_anim_sizer,
+            0,
+            wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM,
             3,
         )
         sim_pane.SetSizer(sim_sizer)
@@ -2453,7 +2586,7 @@ class Gui(wx.Frame):
         self.Bind(wx.EVT_WINDOW_DESTROY, self.on_destroy)
 
         # ── Inner splitter split ─────────────────────────────────────────────
-        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 170)
+        self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
         self.splitter.SetMinimumPaneSize(150)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
@@ -2862,6 +2995,8 @@ class Gui(wx.Frame):
         """Switch between the 2D and 3D signal views."""
         self._is_3d = event.GetInt() == 1
         if self._is_3d:
+            # The progressive animation only applies to the 2D view.
+            self.canvas.skip_animation()
             self.canvas.Hide()
             self.canvas3d.Show()
             self._view_3d_btn.SetLabel("2D")
@@ -3122,7 +3257,26 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Completed %d cycles.") % cycles)
             self.log(_("Completed %d cycles.") % cycles)
         self.update_monitors_list()
+        # Draw the trace progressively (skippable) in the 2D view.
+        if not self._is_3d and self.cycles_completed > 0:
+            self.canvas.set_animation_speed(self._current_anim_speed())
+            self.canvas.start_animation()
         self._render_canvas()
+
+    def _current_anim_speed(self):
+        """Return the speed multiplier selected in the speed dropdown."""
+        sel = self.speed_choice.GetSelection()
+        if sel == wx.NOT_FOUND:
+            return 1.0
+        return self._anim_speeds[sel][1]
+
+    def on_speed_change(self, event):
+        """Apply the chosen animation speed (live, even mid-draw)."""
+        self.canvas.set_animation_speed(self._current_anim_speed())
+
+    def on_skip_animation(self, event):
+        """Skip the progressive trace-drawing animation, showing it in full."""
+        self.canvas.skip_animation()
 
     def on_continue_button(self, event):
         """Handle the event when the user clicks the continue button."""
@@ -3305,6 +3459,7 @@ class Gui(wx.Frame):
 
     def on_reset_button(self, event):
         """Handle the event when the user clicks the reset button."""
+        self.canvas.skip_animation()
         self.cycles_completed = 0
         self.monitors.reset_monitors()
         self._full_history = {}
