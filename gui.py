@@ -1011,9 +1011,7 @@ class LogicViewerDialog(wx.Dialog):
         btn_out.Bind(wx.EVT_BUTTON, lambda e: self._zoom_by(1.0 / 1.25))
         btn_in.Bind(wx.EVT_BUTTON, lambda e: self._zoom_by(1.25))
         btn_reset.Bind(wx.EVT_BUTTON, lambda e: self._zoom_fit())
-        hint = wx.StaticText(
-            bar, label=_("Scroll to zoom • drag to pan")
-        )
+        hint = wx.StaticText(bar, label=_("Scroll to zoom • drag to pan"))
         hint.SetForegroundColour(wx.Colour(150, 160, 175))
         bar_sizer.Add(btn_out, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
         bar_sizer.Add(btn_in, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
@@ -1194,9 +1192,7 @@ class LogicViewerDialog(wx.Dialog):
             w = max(self._NODE_MIN_W, header_w, port_w)
             node["w"] = int(min(w, self._NODE_MAX_W))
 
-            n_rows = max(
-                len(node["in_ports"]), len(node["out_ports"]), 1
-            )
+            n_rows = max(len(node["in_ports"]), len(node["out_ports"]), 1)
             node["h"] = int(max(54, n_rows * 24 + 22))
 
     # ── layout ──────────────────────────────────────────────────────────────
@@ -1736,8 +1732,10 @@ class Gui(wx.Frame):
         )
 
         # Language selector – switch the UI between English and French.
-        self._languages = [("English", wx.LANGUAGE_ENGLISH),
-                           ("Français", wx.LANGUAGE_FRENCH)]
+        self._languages = [
+            ("English", wx.LANGUAGE_ENGLISH),
+            ("Français", wx.LANGUAGE_FRENCH),
+        ]
         self._lang_choice = wx.Choice(
             self.canvas_panel,
             choices=[name for name, _lang in self._languages],
@@ -2005,39 +2003,45 @@ class Gui(wx.Frame):
             .BottomDockable(False)
         )
 
-        self.aui_manager.AddPane(
-            sim_pane,
+        # Panes share one horizontal top dock and stretch to fill its full
+        # width: the relative startup widths are set by dock_proportion (the
+        # slack each pane claims), NOT by BestSize, which only sets a floor.
+        sim_info = (
             _resizable_pane(0, _("Simulation"))
             .Name("Simulation")
-            .MinSize((120, 155))
-            .BestSize((200, 195)),
+            .MinSize((110, 155))
+            .BestSize((150, 195))
         )
-
-        self.aui_manager.AddPane(
-            switch_pane,
+        switch_info = (
             _resizable_pane(1, _("Switches"))
             .Name("Switches")
-            .MinSize((120, 155))
-            .BestSize((200, 195)),
+            .MinSize((110, 155))
+            .BestSize((150, 195))
         )
-
-        self.aui_manager.AddPane(
-            monitor_pane,
+        monitor_info = (
             _resizable_pane(2, _("Monitors"))
             .Name("Monitors")
-            .MinSize((160, 155))
-            .BestSize((200, 195)),
+            .MinSize((140, 155))
+            .BestSize((160, 195))
         )
-
-        # Console gets a wider BestSize because wx.TextCtrl has no natural
-        # fixed width of its own.
-        self.aui_manager.AddPane(
-            console_pane,
+        console_info = (
             _resizable_pane(3, _("Console"))
             .Name("Console")
             .MinSize((200, 155))
-            .BestSize((450, 195)),
+            .BestSize((400, 195))
         )
+
+        # Relative widths (roughly out of 100): controls stay narrow, the
+        # console takes the lion's share.
+        sim_info.dock_proportion = 15
+        switch_info.dock_proportion = 15
+        monitor_info.dock_proportion = 18
+        console_info.dock_proportion = 52
+
+        self.aui_manager.AddPane(sim_pane, sim_info)
+        self.aui_manager.AddPane(switch_pane, switch_info)
+        self.aui_manager.AddPane(monitor_pane, monitor_info)
+        self.aui_manager.AddPane(console_pane, console_info)
 
         self.aui_manager.Update()
         self.top_panel.Bind(wx.EVT_SIZE, self._on_top_panel_size)
