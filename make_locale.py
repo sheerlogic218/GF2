@@ -45,6 +45,8 @@ TRANSLATIONS_FR = {
     # ── Buttons ──────────────────────────────────────────────────────────────
     "Set ON": "Activer",
     "Set OFF": "Désactiver",
+    "ON": "Marche",
+    "OFF": "Arrêt",
     "Save": "Enregistrer",
     "Implement": "Implémenter",
     "File Viewer": "Visionneuse",
@@ -56,9 +58,9 @@ TRANSLATIONS_FR = {
         "Poursuivre la simulation pour %d cycles supplémentaires",
     "Reset the simulation to its initial state":
         "Réinitialiser la simulation à son état initial",
-    "Click a switch to select it, then use Set ON / Set OFF":
+    "Click a switch to select it, then use ON / OFF":
         "Cliquez sur un commutateur pour le sélectionner, "
-        "puis utilisez Activer / Désactiver",
+        "puis utilisez Marche / Arrêt",
     "Set the selected switch to ON (1)":
         "Activer le commutateur sélectionné (1)",
     "Set the selected switch to OFF (0)":

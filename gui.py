@@ -1826,8 +1826,8 @@ class Gui(wx.Frame):
         self.switch_list.Bind(
             wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag
         )
-        self.switch_on = wx.Button(switch_pane, wx.ID_ANY, _("Set ON"))
-        self.switch_off = wx.Button(switch_pane, wx.ID_ANY, _("Set OFF"))
+        self.switch_on = wx.Button(switch_pane, wx.ID_ANY, _("ON"))
+        self.switch_off = wx.Button(switch_pane, wx.ID_ANY, _("OFF"))
 
         self.monitors_label = wx.StaticText(
             monitor_pane, wx.ID_ANY, _("Monitors:")
@@ -1867,7 +1867,7 @@ class Gui(wx.Frame):
             _("Reset the simulation to its initial state")
         )
         self.switch_list.SetToolTip(
-            _("Click a switch to select it, then use Set ON / Set OFF")
+            _("Click a switch to select it, then use ON / OFF")
         )
         self.switch_on.SetToolTip(_("Set the selected switch to ON (1)"))
         self.switch_off.SetToolTip(_("Set the selected switch to OFF (0)"))
@@ -2513,6 +2513,7 @@ class Gui(wx.Frame):
         pos = self.GetPosition()
         size = self.GetSize()
         was_maximized = self.IsMaximized()
+        viewer_was_visible = self._viewer_visible
 
         new_gui = Gui(
             self._title,
@@ -2530,6 +2531,10 @@ class Gui(wx.Frame):
             new_gui.SetPosition(pos)
         new_gui.Show(True)
 
+        # Preserve the file viewer's open/closed state across the rebuild.
+        if viewer_was_visible:
+            new_gui._show_viewer()
+
         # Preserve the active 2D/3D view across the rebuild.
         if self._is_3d:
             new_gui._view_3d_btn.SetValue(True)
@@ -2537,7 +2542,11 @@ class Gui(wx.Frame):
             synth.SetInt(1)
             new_gui._on_toggle_3d(synth)
 
-        self.Destroy()
+        # Destroy the old frame *after* this event finishes unwinding. Calling
+        # Destroy() synchronously here tears down the wx.Choice that fired this
+        # handler (and the AUI/splitter widgets) mid-event, which crashes —
+        # most reliably when the file viewer's extra splitter is open.
+        wx.CallAfter(self.Destroy)
 
     # ── Menu ─────────────────────────────────────────────────────────────────
 
