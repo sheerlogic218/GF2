@@ -2118,6 +2118,62 @@ class LogicViewerDialog(wx.Dialog):
                     break
 
 
+class CascadingAuiManager(agw_aui.AuiManager):
+    """AUI manager whose horizontal pane-sash drags cascade.
+
+    Natively, dragging the sash to the right of a pane only borrows space
+    from its immediate neighbour, so once that neighbour reaches its minimum
+    width the sash is stuck. Here, when the neighbour is pinned at its
+    minimum we instead borrow from the widest pane still able to shrink
+    further along the dock (e.g. enlarging Simulation shrinks the Console
+    once Switches can give no more). Both the sash travel-limit and the
+    space transfer route through :meth:`GetPartnerPane`, and AUI's limit
+    geometry stays correct for whichever pane we return, so overriding this
+    one method is enough.
+    """
+
+    def _pane_slack(self, dock, pane):
+        """Pixels `pane` can still give up before hitting its minimum."""
+        if pane.IsFixed():
+            return 0
+        if dock.IsHorizontal():
+            current = pane.rect.width
+            minimum = (
+                pane.min_size.x if pane.min_size.IsFullySpecified() else 1
+            )
+        else:
+            current = pane.rect.height
+            minimum = (
+                pane.min_size.y if pane.min_size.IsFullySpecified() else 1
+            )
+        return current - minimum
+
+    def GetPartnerPane(self, dock, pane):
+        partner = super().GetPartnerPane(dock, pane)
+
+        # Keep the default neighbour whenever it still has room to give, and
+        # for any case the base class couldn't pair (rightmost pane, etc.).
+        if partner is None or self._pane_slack(dock, partner) > 1:
+            return partner
+
+        # Neighbour pinned at its minimum: redirect to the widest shrinkable
+        # pane further along the dock. As each one bottoms out, the next call
+        # naturally picks the next-widest, so the shrink cascades.
+        pane_position = -1
+        best = None
+        best_slack = 1
+        for i, candidate in enumerate(dock.panes):
+            if candidate.window == pane.window:
+                pane_position = i
+            elif pane_position != -1 and not candidate.IsFixed():
+                slack = self._pane_slack(dock, candidate)
+                if slack > best_slack:
+                    best_slack = slack
+                    best = candidate
+
+        return best if best is not None else partner
+
+
 class Gui(wx.Frame):
     """Configure the main window and all the widgets."""
 
@@ -2291,7 +2347,7 @@ class Gui(wx.Frame):
         self.top_panel = wx.Panel(self.splitter)
         # self.top_panel.SetMinSize((-1, 150))
 
-        self.aui_manager = agw_aui.AuiManager(self.top_panel)
+        self.aui_manager = CascadingAuiManager(self.top_panel)
 
         # FIX: Create the sub-pane window panels BEFORE using them as parents
         sim_pane = wx.Panel(self.top_panel)
