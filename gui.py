@@ -21,6 +21,7 @@ import wx.stc
 from OpenGL import GL, GLU, GLUT
 
 from devices import Devices
+from flatbutton import FlatButton, _GREEN, _GREEN_TEXT
 from monitors import Monitors
 from names import Names
 from network import Network
@@ -1520,9 +1521,9 @@ class LogicViewerDialog(wx.Dialog):
         bar = wx.Panel(self)
         bar.SetBackgroundColour(wx.Colour(236, 238, 241))
         bar_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        btn_out = wx.Button(bar, label="−", size=(34, 26))
-        btn_in = wx.Button(bar, label="+", size=(34, 26))
-        btn_reset = wx.Button(bar, label=_("Fit"), size=(-1, 26))
+        btn_out = FlatButton(bar, "−", variant="ghost", pill=True, size=(34, 26))
+        btn_in = FlatButton(bar, "+", variant="ghost", pill=True, size=(34, 26))
+        btn_reset = FlatButton(bar, _("Fit"), variant="ghost", size=(-1, 26))
         btn_out.SetToolTip(_("Zoom out"))
         btn_in.SetToolTip(_("Zoom in"))
         btn_reset.SetToolTip(_("Reset zoom to fit"))
@@ -2630,8 +2631,8 @@ class Gui(wx.Frame):
             6,
         )
 
-        self._view_3d_btn = wx.ToggleButton(
-            self.canvas_panel, label="3D", size=(38, 26)
+        self._view_3d_btn = FlatButton(
+            self.canvas_panel, "3D", toggle=True, variant="ghost", size=(42, 26)
         )
         self._view_3d_btn.SetToolTip(_("Switch to 3D signal view"))
         self._view_3d_btn.Bind(wx.EVT_TOGGLEBUTTON, self._on_toggle_3d)
@@ -2642,8 +2643,8 @@ class Gui(wx.Frame):
             6,
         )
 
-        self._logic_viewer_btn = wx.Button(
-            self.canvas_panel, label=_("Logic Viewer"), size=(-1, 26)
+        self._logic_viewer_btn = FlatButton(
+            self.canvas_panel, _("Logic Viewer"), variant="outline", size=(-1, 26)
         )
         self._logic_viewer_btn.SetToolTip(_("Show gate-level circuit diagram"))
         self._logic_viewer_btn.Bind(wx.EVT_BUTTON, self._on_logic_viewer)
@@ -2734,17 +2735,22 @@ class Gui(wx.Frame):
         self.spin = wx.SpinCtrl(
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
         )
-        self.run_button = wx.Button(sim_pane, wx.ID_ANY, "▶", size=(32, 28))
-        self.continue_button = wx.Button(
-            sim_pane, wx.ID_ANY, "+10", size=(45, 28)
+        self.run_button = FlatButton(
+            sim_pane, "▶", variant="filled",
+            accent=_GREEN, fg=_GREEN_TEXT, pill=True, size=(36, 28)
+        )
+        self.continue_button = FlatButton(
+            sim_pane, "+10", variant="outline", size=(50, 28)
         )
         self.last_cycles_check = wx.CheckBox(sim_pane, wx.ID_ANY, _("Last"))
         self.last_cycles_spin = wx.SpinCtrl(
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
         )
-        self.reset_button = wx.Button(sim_pane, wx.ID_ANY, "↺", size=(32, 28))
-        self.skip_button = wx.Button(
-            sim_pane, wx.ID_ANY, _("Skip"), size=(48, 28)
+        self.reset_button = FlatButton(
+            sim_pane, "↺", variant="ghost", pill=True, size=(36, 28)
+        )
+        self.skip_button = FlatButton(
+            sim_pane, _("Skip"), variant="ghost", size=(52, 28)
         )
         # Animation speed selector for the progressive trace drawing.
         self._anim_speeds = [
@@ -2776,8 +2782,10 @@ class Gui(wx.Frame):
         self.switch_list.Bind(
             wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag
         )
-        self.switch_on = wx.Button(switch_pane, wx.ID_ANY, _("ON"))
-        self.switch_off = wx.Button(switch_pane, wx.ID_ANY, _("OFF"))
+        self.switch_on = FlatButton(
+            switch_pane, _("ON"), variant="filled", accent=_GREEN, fg=_GREEN_TEXT
+        )
+        self.switch_off = FlatButton(switch_pane, _("OFF"), variant="outline")
 
         self.monitors_label = wx.StaticText(
             monitor_pane, wx.ID_ANY, _("Monitors:")
@@ -2786,10 +2794,10 @@ class Gui(wx.Frame):
             monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
         self.monitors_list.SetBackgroundColour(_CONSOLE_BG)
-        self.add_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "+")
-        self.remove_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "-")
-        self.monitor_up_btn = wx.Button(monitor_pane, wx.ID_ANY, "↑")
-        self.monitor_down_btn = wx.Button(monitor_pane, wx.ID_ANY, "↓")
+        self.add_monitor_btn = FlatButton(monitor_pane, "+", variant="outline", pill=True)
+        self.remove_monitor_btn = FlatButton(monitor_pane, "-", variant="ghost", pill=True)
+        self.monitor_up_btn = FlatButton(monitor_pane, "↑", variant="ghost", pill=True)
+        self.monitor_down_btn = FlatButton(monitor_pane, "↓", variant="ghost", pill=True)
 
         self.console = wx.TextCtrl(
             console_pane,
@@ -3117,17 +3125,19 @@ class Gui(wx.Frame):
 
         self._viewer_title.SetMinSize((50, -1))
 
-        save_btn = wx.Button(self.viewer_panel, label=_("Save"), size=(50, 28))
+        save_btn = FlatButton(self.viewer_panel, _("Save"), variant="filled", size=(58, 28))
         save_btn.SetToolTip(_("Save changes to file"))
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
 
-        implement_btn = wx.Button(
-            self.viewer_panel, label=_("Implement"), size=(80, 28)
+        implement_btn = FlatButton(
+            self.viewer_panel, _("Implement"), variant="filled", size=(88, 28)
         )
         implement_btn.SetToolTip(_("Run the simulator using this file"))
         implement_btn.Bind(wx.EVT_BUTTON, self._on_implement_viewer)
 
-        close_btn = wx.Button(self.viewer_panel, label="X", size=(28, 28))
+        close_btn = FlatButton(
+            self.viewer_panel, "✕", variant="ghost", pill=True, size=(28, 28)
+        )
         close_btn.SetToolTip(_("Close file viewer"))
         close_btn.Bind(wx.EVT_BUTTON, self._on_close_viewer)
 
@@ -4120,8 +4130,8 @@ class Gui(wx.Frame):
         )
         txt.SetBackgroundColour(dlg.GetBackgroundColour())
         sizer.Add(txt, 1, wx.EXPAND | wx.ALL, 10)
-        btn = wx.Button(dlg, wx.ID_OK)
-        btn.SetDefault()
+        btn = FlatButton(dlg, "OK", variant="filled", size=(80, 30))
+        btn.Bind(wx.EVT_BUTTON, lambda _: dlg.EndModal(wx.ID_OK))
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 8)
         dlg.SetSizer(sizer)
         dlg.ShowModal()
