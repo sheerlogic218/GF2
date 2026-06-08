@@ -51,6 +51,19 @@ TRANSLATIONS_FR = {
     "Implement": "Implémenter",
     "File Viewer": "Visionneuse",
 
+    # ── Logic Viewer ─────────────────────────────────────────────────────────
+    "Logic Viewer": "Visionneuse logique",
+    "Fit": "Ajuster",
+    "Zoom out": "Zoom arrière",
+    "Zoom in": "Zoom avant",
+    "Reset zoom to fit": "Réinitialiser le zoom pour ajuster",
+    "Scroll to zoom • drag to pan":
+        "Molette pour zoomer • glisser pour déplacer",
+    "No circuit implemented yet.":
+        "Aucun circuit implémenté pour l'instant.",
+    "Move selected monitor up": "Déplacer le moniteur sélectionné vers le haut",
+    "Move selected monitor down": "Déplacer le moniteur sélectionné vers le bas",
+
     # ── Tooltips ─────────────────────────────────────────────────────────────
     "Run the simulation from scratch for %d cycles":
         "Exécuter la simulation depuis zéro pour %d cycles",

@@ -944,6 +944,8 @@ class LogicViewerDialog(wx.Dialog):
     _ROW_GAP = 22
     _LAYER_GAP = 96  # horizontal space between columns (room for wires)
     _PAD = 50
+    _HEADER_H = 28  # top band reserved for the gate name + signal label
+    _PORT_ROW_H = 22  # vertical room each input/output port needs
 
     _BG = {
         "AND": wx.Colour(25, 55, 95),
@@ -1062,7 +1064,7 @@ class LogicViewerDialog(wx.Dialog):
             d.XOR: ("XOR", "XOR"),
             d.CLOCK: ("CLK", "CLOCK"),
             d.SWITCH: ("SW", "SWITCH"),
-            d.D_TYPE: ("FF", "DTYPE"),
+            d.D_TYPE: ("D-type", "DTYPE"),
         }
         return table.get(k, ("?", "UNKNOWN"))
 
@@ -1192,8 +1194,11 @@ class LogicViewerDialog(wx.Dialog):
             w = max(self._NODE_MIN_W, header_w, port_w)
             node["w"] = int(min(w, self._NODE_MAX_W))
 
+            # Header band on top, then one row of vertical room per port below.
             n_rows = max(len(node["in_ports"]), len(node["out_ports"]), 1)
-            node["h"] = int(max(54, n_rows * 24 + 22))
+            node["h"] = int(
+                max(54, self._HEADER_H + n_rows * self._PORT_ROW_H + 6)
+            )
 
     # ── layout ──────────────────────────────────────────────────────────────
 
@@ -1371,16 +1376,22 @@ class LogicViewerDialog(wx.Dialog):
     # ── drawing ─────────────────────────────────────────────────────────────
 
     def _port_y(self, node, port_id, side):
-        """Y offset of a port within the node box."""
+        """Y offset of a port within the node box.
+
+        Ports are distributed over the body *below* the header band so their
+        labels never overlap the gate name / signal label drawn at the top.
+        """
         ports = node["in_ports"] if side == "in" else node["out_ports"]
         n = len(ports)
+        top = 0 if node["kind"] == "WIRE" else self._HEADER_H
+        span = node["h"] - top
         if n == 0:
-            return node["h"] / 2
+            return top + span / 2
         try:
             idx = ports.index(port_id)
         except ValueError:
-            return node["h"] / 2
-        return (idx + 1) * node["h"] / (n + 1)
+            return top + span / 2
+        return top + (idx + 1) * span / (n + 1)
 
     def _on_paint(self, event):
         dc = wx.PaintDC(self._scroll)
@@ -1567,7 +1578,7 @@ class LogicViewerDialog(wx.Dialog):
         in_ports = node["in_ports"]
         n_in = len(in_ports)
         for i, pid in enumerate(in_ports):
-            py = y + (i + 1) * h / (n_in + 1)
+            py = y + self._port_y(node, pid, "in")
             gc.SetPen(stub_pen)
             gc.StrokeLine(x - 10, py, x, py)
             pname = (
@@ -1583,7 +1594,7 @@ class LogicViewerDialog(wx.Dialog):
         out_ports = node["out_ports"]
         n_out = len(out_ports)
         for i, pid in enumerate(out_ports):
-            py = y + (i + 1) * h / (n_out + 1)
+            py = y + self._port_y(node, pid, "out")
             gc.SetPen(stub_pen)
             gc.StrokeLine(x + w, py, x + w + 10, py)
             pname = (
@@ -1605,7 +1616,7 @@ class LogicViewerDialog(wx.Dialog):
                     else ""
                 )
                 if "CLK" in pname.upper():
-                    py = y + (i + 1) * h / (n_in + 1)
+                    py = y + self._port_y(node, pid, "in")
                     gc.SetPen(
                         gc.CreatePen(
                             wx.GraphicsPenInfo(wx.Colour(220, 200, 80)).Width(
