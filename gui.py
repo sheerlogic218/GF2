@@ -1001,7 +1001,7 @@ class LogicViewerDialog(wx.Dialog):
 
         # Bottom control strip: zoom buttons + hint.
         bar = wx.Panel(self)
-        bar.SetBackgroundColour(wx.Colour(30, 34, 44))
+        bar.SetBackgroundColour(wx.Colour(236, 238, 241))
         bar_sizer = wx.BoxSizer(wx.HORIZONTAL)
         btn_out = wx.Button(bar, label="−", size=(34, 26))
         btn_in = wx.Button(bar, label="+", size=(34, 26))
@@ -1013,7 +1013,7 @@ class LogicViewerDialog(wx.Dialog):
         btn_in.Bind(wx.EVT_BUTTON, lambda e: self._zoom_by(1.25))
         btn_reset.Bind(wx.EVT_BUTTON, lambda e: self._zoom_fit())
         hint = wx.StaticText(bar, label=_("Scroll to zoom • drag to pan"))
-        hint.SetForegroundColour(wx.Colour(150, 160, 175))
+        hint.SetForegroundColour(wx.Colour(90, 95, 105))
         bar_sizer.Add(btn_out, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
         bar_sizer.Add(btn_in, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
         bar_sizer.Add(btn_reset, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 4)
@@ -3155,18 +3155,34 @@ class Gui(wx.Frame):
             "Welcome to the Logic Simulator!\n\n"
             "Here is a summary of the available interface functions:\n\n"
             "1. Simulation Controls:\n"
-            "   - Use the spin box to adjust the target simulation cycle count.\n"
+            "   - Use the spin box to set the number of cycles to run or continue.\n"
             "   - Click '▶' to start or restart the simulation from zero.\n"
-            "   - Click '+10' (or your step button) to continue running further cycles.\n"
-            "   - Click '↺' to clear current history and reset the network.\n\n"
+            "   - Click '+N' to continue running N further cycles.\n"
+            "   - Click '↺' to clear the current history and reset the network.\n"
+            "   - Tick 'Last' and set a number to show only the most recent cycles.\n\n"
             "2. Interacting with the Canvas:\n"
-            "   - Drag with Left Mouse Button to pan across the logic waveforms.\n"
-            "   - Scroll your Mouse Wheel to zoom in/out smoothly on active lines.\n"
-            "   - Right-click inside the canvas to copy or save a snapshot image.\n\n"
+            "   - Drag with the Left Mouse Button to pan across the logic waveforms.\n"
+            "   - Scroll the Mouse Wheel to zoom in/out on active lines.\n"
+            "   - Use the 'X Zoom' slider to stretch the time axis horizontally.\n"
+            "   - Right-click inside the canvas to copy or save a snapshot image.\n"
+            "   - Click '3D' for a three-dimensional view of the signals (drag to\n"
+            "     rotate, scroll to zoom); click '2D' to switch back.\n\n"
             "3. Switches & Monitors:\n"
-            "   - Select a switch from the dropdown menu and toggle its state via 'Set ON' / 'Set OFF'.\n"
-            "   - Add (+) or remove (-) selected component signals using the Monitors listbox.\n\n"
-            "4. View Options:\n"
+            "   - Select a switch from the list and toggle it with 'ON' / 'OFF'.\n"
+            "   - Add (+) or remove (-) signals using the Monitors list.\n"
+            "   - Reorder monitors with the up/down arrows.\n"
+            "   - A monitor added mid-run shows the signal's history for the\n"
+            "     cycles before it was monitored.\n\n"
+            "4. Logic Viewer:\n"
+            "   - Click 'Logic Viewer' to open the gate-level circuit diagram.\n"
+            "   - Gates use standard symbols with their names inside; a single-input\n"
+            "     NAND is shown as a NOT (inverter), and an AND/OR feeding an\n"
+            "     inverter is merged into a NAND/NOR gate.\n"
+            "   - Wires leave each gate from its output, beside the inversion bubble.\n"
+            "   - Drag to pan, scroll to zoom, and use the -/+/Fit buttons.\n\n"
+            "5. Language & View Options:\n"
+            "   - Use the language selector (next to '3D') to switch between\n"
+            "     English and French.\n"
             "   - Toggle the live text definition panel under View -> Show File Viewer."
         )
 
