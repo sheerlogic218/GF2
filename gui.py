@@ -21,7 +21,7 @@ import wx.stc
 from OpenGL import GL, GLU, GLUT
 
 from devices import Devices
-from flatbutton import FlatButton
+from flatbutton import FlatButton, FlatChoice
 from monitors import Monitors
 from names import Names
 from network import Network
@@ -2620,7 +2620,7 @@ class Gui(wx.Frame):
             ("Français", wx.LANGUAGE_FRENCH),
             ("Ελληνικά", wx.LANGUAGE_GREEK),
         ]
-        self._lang_choice = wx.Choice(
+        self._lang_choice = FlatChoice(
             self.canvas_panel,
             choices=[name for name, _lang in self._languages],
             size=(110, 26),
@@ -2773,7 +2773,7 @@ class Gui(wx.Frame):
             ("2x", 2.0),
             ("5x", 5.0),
         ]
-        self.speed_choice = wx.Choice(
+        self.speed_choice = FlatChoice(
             sim_pane,
             wx.ID_ANY,
             choices=[label for label, _mult in self._anim_speeds],

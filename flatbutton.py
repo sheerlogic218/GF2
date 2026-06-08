@@ -210,6 +210,247 @@ class FlatButton(wx.Control):
         gc.DrawText(self._label, (w - tw) // 2, (h - th) // 2)
 
 
+# ── FlatChoice ───────────────────────────────────────────────────────────────
+
+class _FlatChoicePopup(wx.PopupTransientWindow):
+    """Owner-drawn drop-down list spawned by FlatChoice."""
+
+    _PAD_X = 10
+
+    def __init__(self, owner: "FlatChoice"):
+        super().__init__(owner, wx.BORDER_NONE)
+        self._owner = owner
+        self._hot = -1
+
+        self.SetFont(owner.GetFont())
+        dc = wx.ClientDC(self)
+        dc.SetFont(self.GetFont())
+        _, th = dc.GetTextExtent("Ag")
+        self._item_h = th + 12
+
+        n = len(owner._choices)
+        w = max(owner.GetSize().width, 60)
+        h = self._item_h * n + 2  # 1-px border top + bottom
+        self.SetSize((w, h))
+
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self._on_paint)
+        self.Bind(wx.EVT_ERASE_BACKGROUND, lambda e: None)
+        self.Bind(wx.EVT_MOTION, self._on_motion)
+        self.Bind(wx.EVT_LEFT_UP, self._on_click)
+        self.Bind(wx.EVT_LEAVE_WINDOW, self._on_leave)
+
+    def _idx_at(self, y):
+        idx = (y - 1) // self._item_h
+        return idx if 0 <= idx < len(self._owner._choices) else -1
+
+    def _on_motion(self, e):
+        hot = self._idx_at(e.GetY())
+        if hot != self._hot:
+            self._hot = hot
+            self.Refresh()
+
+    def _on_leave(self, _e):
+        if self._hot != -1:
+            self._hot = -1
+            self.Refresh()
+
+    def _on_click(self, e):
+        idx = self._idx_at(e.GetY())
+        if idx >= 0:
+            self._owner._selection = idx
+            self._owner.Refresh()
+            self.Dismiss()
+            evt = wx.CommandEvent(wx.wxEVT_CHOICE, self._owner.GetId())
+            evt.SetInt(idx)
+            evt.SetString(self._owner._choices[idx])
+            evt.SetEventObject(self._owner)
+            wx.PostEvent(self._owner.GetEventHandler(), evt)
+
+    def _on_paint(self, _e):
+        w, h = self.GetClientSize()
+        dc = wx.BufferedPaintDC(self)
+        gc = wx.GCDC(dc)
+
+        accent = self._owner._accent
+        fg = self._owner._fg or ACCENT_TEXT
+        border_col = _shift(accent, 0.35)
+
+        gc.SetPen(wx.Pen(border_col, 1))
+        gc.SetBrush(wx.Brush(accent))
+        gc.DrawRectangle(0, 0, w, h)
+
+        gc.SetFont(self.GetFont())
+        for i, text in enumerate(self._owner._choices):
+            y = 1 + i * self._item_h
+            if i == self._hot:
+                gc.SetPen(wx.TRANSPARENT_PEN)
+                gc.SetBrush(wx.Brush(_shift(accent, 0.18)))
+                gc.DrawRectangle(1, y, w - 2, self._item_h)
+            gc.SetTextForeground(fg)
+            _, th = gc.GetTextExtent(text)
+            gc.DrawText(text, self._PAD_X, y + (self._item_h - th) // 2)
+
+
+class FlatChoice(wx.Control):
+    """Owner-drawn drop-down styled like FlatButton (filled variant by default).
+
+    Drop-in replacement for wx.Choice — same API: GetSelection / SetSelection /
+    GetString / GetStringSelection / GetCount / Append / Clear / Set.
+    Fires wx.EVT_CHOICE on selection just like the native widget.
+    """
+
+    def __init__(
+        self,
+        parent,
+        id=wx.ID_ANY,
+        *,
+        choices=None,
+        variant="filled",
+        accent=ACCENT,
+        fg=None,
+        pill=False,
+        radius=8,
+        font=None,
+        size=wx.DefaultSize,
+    ):
+        super().__init__(parent, id, size=size, style=wx.BORDER_NONE)
+        self._choices = list(choices or [])
+        self._selection = 0
+        self._variant = variant
+        self._accent = accent
+        self._fg = fg
+        self._pill = pill
+        self._radius = radius
+        self._hover = False
+        self._pressed = False
+
+        if font is None:
+            font = parent.GetFont().Bold()
+        self.SetFont(font)
+
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+
+        self.Bind(wx.EVT_PAINT, self._on_paint)
+        self.Bind(wx.EVT_ERASE_BACKGROUND, lambda e: None)
+        self.Bind(wx.EVT_ENTER_WINDOW, self._on_enter)
+        self.Bind(wx.EVT_LEAVE_WINDOW, self._on_leave)
+        self.Bind(wx.EVT_LEFT_DOWN, self._on_down)
+        self.Bind(wx.EVT_LEFT_UP, self._on_up)
+
+    # ── wx.Choice-compatible API ─────────────────────────────────────────────
+    def GetSelection(self):
+        return self._selection
+
+    def SetSelection(self, n):
+        self._selection = int(n)
+        self.Refresh()
+
+    def GetString(self, n):
+        return self._choices[n] if 0 <= n < len(self._choices) else ""
+
+    def GetStringSelection(self):
+        return self.GetString(self._selection)
+
+    def SetStringSelection(self, s):
+        if s in self._choices:
+            self._selection = self._choices.index(s)
+            self.Refresh()
+
+    def GetCount(self):
+        return len(self._choices)
+
+    def Append(self, item):
+        self._choices.append(item)
+        self.InvalidateBestSize()
+        self.Refresh()
+
+    def Clear(self):
+        self._choices.clear()
+        self._selection = 0
+        self.Refresh()
+
+    def Set(self, choices):
+        self._choices = list(choices)
+        self._selection = 0
+        self.InvalidateBestSize()
+        self.Refresh()
+
+    # ── sizing ───────────────────────────────────────────────────────────────
+    def DoGetBestSize(self):
+        dc = wx.ClientDC(self)
+        dc.SetFont(self.GetFont())
+        max_w = max((dc.GetTextExtent(c)[0] for c in self._choices), default=40)
+        th = dc.GetTextExtent("Ag")[1]
+        return wx.Size(max_w + 48, th + 16)
+
+    # ── interaction ──────────────────────────────────────────────────────────
+    def _on_enter(self, _e):
+        self._hover = True
+        self.Refresh()
+
+    def _on_leave(self, _e):
+        self._hover = self._pressed = False
+        self.Refresh()
+
+    def _on_down(self, _e):
+        if not self.IsThisEnabled():
+            return
+        self._pressed = True
+        if not self.HasCapture():
+            self.CaptureMouse()
+        self.Refresh()
+
+    def _on_up(self, e):
+        if self.HasCapture():
+            self.ReleaseMouse()
+        was_pressed, self._pressed = self._pressed, False
+        self.Refresh()
+        if (
+            was_pressed
+            and self.IsThisEnabled()
+            and self.GetClientRect().Contains(e.GetPosition())
+        ):
+            popup = _FlatChoicePopup(self)
+            pos = self.ClientToScreen((0, self.GetSize().height))
+            popup.SetPosition(pos)
+            popup.Popup()
+
+    # ── painting ─────────────────────────────────────────────────────────────
+    def _on_paint(self, _e):
+        w, h = self.GetClientSize()
+        dc = wx.BufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        gc = wx.GCDC(dc)
+        radius = h / 2 if self._pill else self._radius
+
+        fill = self._accent
+        if self._pressed:
+            fill = _shift(fill, -0.18)
+        elif self._hover:
+            fill = _shift(fill, 0.12)
+        text_col = self._fg or ACCENT_TEXT
+
+        gc.SetPen(wx.TRANSPARENT_PEN)
+        gc.SetBrush(wx.Brush(fill))
+        gc.DrawRoundedRectangle(0, 0, w - 1, h - 1, radius)
+
+        gc.SetFont(self.GetFont())
+        gc.SetTextForeground(text_col)
+
+        arrow = "▾"
+        aw, _ = gc.GetTextExtent(arrow)
+        arrow_x = w - aw - 8
+        _, ah = gc.GetTextExtent(arrow)
+        gc.DrawText(arrow, arrow_x, (h - ah) // 2)
+
+        label = self.GetStringSelection()
+        tw, th_ = gc.GetTextExtent(label)
+        gc.DrawText(label, (arrow_x - tw) // 2, (h - th_) // 2)
+
+
 # ── quick visual demo ────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app = wx.App()
