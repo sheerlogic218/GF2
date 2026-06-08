@@ -79,6 +79,14 @@ TRANSLATIONS_FR = {
         "Exécuter le simulateur avec ce fichier",
     "Close file viewer":
         "Fermer la visionneuse",
+    "Change interface language":
+        "Changer la langue de l'interface",
+    "Switch to 3D signal view":
+        "Passer à la vue 3D des signaux",
+    "Switch back to 2D signal view":
+        "Revenir à la vue 2D des signaux",
+    "Show gate-level circuit diagram":
+        "Afficher le schéma logique du circuit",
 
     # ── Status bar – static messages ─────────────────────────────────────────
     "Ready": "Prêt",
@@ -167,6 +175,8 @@ TRANSLATIONS_FR = {
     # ── Canvas labels (rendered via OpenGL) ──────────────────────────────────
     "High": "Haut",
     "Low": "Bas",
+    "HIGH": "HAUT",
+    "LOW": "BAS",
 
     # ── Monitor list suffix ───────────────────────────────────────────────────
     " (on)": " (actif)",

@@ -10,6 +10,7 @@ Gui - configures the main window and all the widgets.
 
 import datetime
 import math
+import os
 import re
 
 import numpy as np
@@ -727,7 +728,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         HIGH_H = 22.0
         LOW_H = 3.0
 
-        for k, (key, _) in enumerate(signal_items):
+        for k, (key, _sig) in enumerate(signal_items):
             device_id, output_id = key
             sig_values = visible[key]
             z_center = (k - (num_signals - 1) / 2.0) * LANE_D
@@ -780,7 +781,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         GL.glEnable(GL.GL_BLEND)
         GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
         GL.glDepthMask(GL.GL_FALSE)
-        for k, (key, _) in enumerate(signal_items):
+        for k, (key, _sig) in enumerate(signal_items):
             z_c = (k - (num_signals - 1) / 2.0) * LANE_D
             z0 = z_c - TRACE_DEPTH / 2
             z1 = z_c + TRACE_DEPTH / 2
@@ -798,7 +799,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         GL.glEnable(GL.GL_CULL_FACE)
 
         # Plane border outlines (one solid-colour line loop per plane per lane)
-        for k, (key, _) in enumerate(signal_items):
+        for k, (key, _sig) in enumerate(signal_items):
             z_c = (k - (num_signals - 1) / 2.0) * LANE_D
             z0 = z_c - TRACE_DEPTH / 2
             z1 = z_c + TRACE_DEPTH / 2
@@ -826,12 +827,12 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             self.render_text(str(i), x - 3, label_y, z_lo - 14)  # back edge
 
         # HIGH and LOW level labels — one pair at the right end of each lane
-        for k, (key, _) in enumerate(signal_items):
+        for k, (key, _sig) in enumerate(signal_items):
             z_c = (k - (num_signals - 1) / 2.0) * LANE_D
             r, g, b = self._TRACK_COLORS[k % len(self._TRACK_COLORS)]
             GL.glColor3f(r * 0.9, g * 0.9, b * 0.9)
-            self.render_text("HIGH", x_hi + 6, -6 + HIGH_H, z_c)
-            self.render_text("LOW", x_hi + 6, -6 + LOW_H, z_c)
+            self.render_text(_("HIGH"), x_hi + 6, -6 + HIGH_H, z_c)
+            self.render_text(_("LOW"), x_hi + 6, -6 + LOW_H, z_c)
 
         GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
@@ -1634,6 +1635,7 @@ class Gui(wx.Frame):
         super().__init__(parent=None, title=title, size=(1100, 600))
 
         # Track the currently viewed file path
+        self._title = title
         self._viewer_path = path
         self._viewer_visible = False
         self.devices = devices
@@ -1731,6 +1733,24 @@ class Gui(wx.Frame):
         )
         x_zoom_row.Add(
             self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
+        )
+
+        # Language selector – switch the UI between English and French.
+        self._languages = [("English", wx.LANGUAGE_ENGLISH),
+                           ("Français", wx.LANGUAGE_FRENCH)]
+        self._lang_choice = wx.Choice(
+            self.canvas_panel,
+            choices=[name for name, _lang in self._languages],
+            size=(96, 26),
+        )
+        self._lang_choice.SetToolTip(_("Change interface language"))
+        self._lang_choice.SetSelection(self._current_language_index())
+        self._lang_choice.Bind(wx.EVT_CHOICE, self._on_language_change)
+        x_zoom_row.Add(
+            self._lang_choice,
+            0,
+            wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT,
+            6,
         )
 
         self._view_3d_btn = wx.ToggleButton(
@@ -2053,6 +2073,24 @@ class Gui(wx.Frame):
         # Load the initial file into the viewer if one was provided
         if path:
             self._load_file_into_viewer(path)
+
+        # Make sure the window opens fully on-screen so the bottom control row
+        # (X-Zoom slider, language selector, 3D and Logic Viewer buttons) is
+        # always visible, then centre it on the display.
+        self._position_on_startup()
+
+    def _position_on_startup(self):
+        """Clamp the frame to the display work area and centre it."""
+        idx = wx.Display.GetFromWindow(self)
+        if idx == wx.NOT_FOUND:
+            idx = 0  # window not yet shown on a display – use the primary one
+        area = wx.Display(idx).GetClientArea()  # excludes taskbar / docks
+        w, h = self.GetSize()
+        w = min(w, area.width)
+        h = min(h, area.height)
+        self.SetSize(w, h)
+        self.Layout()
+        self.CentreOnScreen()
 
     def on_destroy(self, event):
         """Safely detach and clean up the active AUI workspace layout layout engine."""
@@ -2431,6 +2469,72 @@ class Gui(wx.Frame):
         self.canvas_host.Layout()
         self._render_canvas()
 
+    # ── Language switching ───────────────────────────────────────────────────
+
+    def _current_language_index(self):
+        """Return the index in self._languages matching the active locale."""
+        loc = wx.GetLocale()
+        current = loc.GetLanguage() if loc else wx.LANGUAGE_DEFAULT
+        for i, (_name, lang) in enumerate(self._languages):
+            if lang == current:
+                return i
+        return 0  # default to English
+
+    def _on_language_change(self, event):
+        """Switch the interface language to the user's selection."""
+        idx = self._lang_choice.GetSelection()
+        if idx < 0:
+            return
+        _name, wx_lang = self._languages[idx]
+        self._apply_language(wx_lang)
+
+    def _apply_language(self, wx_lang):
+        """Re-initialise the locale and rebuild the window in the new language.
+
+        wxPython evaluates _() lookups when widgets are created, so the cleanest
+        way to switch language at runtime is to recreate the frame with the
+        underlying simulator objects (which keep all signal history) intact.
+        """
+        locale_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "locale"
+        )
+        wx.Locale.AddCatalogLookupPathPrefix(locale_dir)
+        new_locale = wx.Locale()
+        new_locale.Init(wx_lang, wx.LOCALE_DONT_LOAD_DEFAULT)
+        new_locale.AddCatalog("logsim")
+        # Keep a reference on the app so the locale is not garbage-collected.
+        app = wx.GetApp()
+        app._app_locale = new_locale
+
+        pos = self.GetPosition()
+        size = self.GetSize()
+        was_maximized = self.IsMaximized()
+
+        new_gui = Gui(
+            self._title,
+            self._viewer_path,
+            self.names,
+            self.devices,
+            self.network,
+            self.monitors,
+        )
+        new_gui.cycles_completed = self.cycles_completed
+        if was_maximized:
+            new_gui.Maximize(True)
+        else:
+            new_gui.SetSize(size)
+            new_gui.SetPosition(pos)
+        new_gui.Show(True)
+
+        # Preserve the active 2D/3D view across the rebuild.
+        if self._is_3d:
+            new_gui._view_3d_btn.SetValue(True)
+            synth = wx.CommandEvent(wx.wxEVT_TOGGLEBUTTON)
+            synth.SetInt(1)
+            new_gui._on_toggle_3d(synth)
+
+        self.Destroy()
+
     # ── Menu ─────────────────────────────────────────────────────────────────
 
     def on_menu(self, event):
@@ -2486,7 +2590,7 @@ class Gui(wx.Frame):
 
     def run_network(self, cycles):
         """Run the backend network and record monitor signals for each cycle."""
-        for _ in range(cycles):
+        for _cycle in range(cycles):
             if self.network.execute_network():
                 self.monitors.record_signals()
             else:
