@@ -1090,6 +1090,9 @@ class LogicViewerDialog(wx.Dialog):
                 "left_w": 0,
                 "right_w": 0,
                 "layer": 0,
+                # {source_port_id: wire_name} drawn at this node's output(s)
+                # for user-named wires that were collapsed away.
+                "out_labels": {},
             }
 
         for dev_id in d.find_devices():
@@ -1137,6 +1140,11 @@ class LogicViewerDialog(wx.Dialog):
                 src["kind"] = new_kind
                 src["short"] = new_kind
 
+                # The merged gate now produces what the inverter did, so it
+                # inherits any named-wire labels sitting on the NOT's output.
+                for sp, name in node["out_labels"].items():
+                    src["out_labels"].setdefault(src_port, name)
+
                 not_out = [e for e in self._edges if e[0] == nid]
                 self._edges = [
                     e for e in self._edges if e[0] != nid and e[2] != nid
@@ -1149,6 +1157,21 @@ class LogicViewerDialog(wx.Dialog):
                         )
                 changed = True
                 break
+
+    def _named_wire_label(self, dev_id):
+        """Return the display name if dev_id is a user-named top-level wire.
+
+        Named signals are scoped as ``__name__TopScope__`` (two segments once
+        the ``__`` delimiters are split off), whereas module-internal buffers
+        carry an extra instance segment (``__output__gareth__Main__``). Only the
+        former — wires the user explicitly named in the top module — are
+        surfaced at the producing gate's output.
+        """
+        raw = self._names.get_name_string(dev_id) or ""
+        segments = [s for s in raw.split("__") if s]
+        if len(segments) == 2:
+            return self._names.get_pretty_name(dev_id)
+        return None
 
     def _collapse_wire_nodes(self):
         """Remove pass-through WIRE (1-input AND buffer) nodes from the graph.
@@ -1175,6 +1198,11 @@ class LogicViewerDialog(wx.Dialog):
                     (s, sp, d, dp) for s, sp, d, dp in self._edges if s == nid
                 ]
 
+                # A name to carry upstream: this wire's own name (if the user
+                # named it) or one inherited from a downstream named wire.
+                carried = self._nodes[nid]["out_labels"].get(None)
+                own_label = self._named_wire_label(nid) or carried
+
                 # Remove all edges touching this node, then the node itself.
                 self._edges = [
                     e for e in self._edges if e[0] != nid and e[2] != nid
@@ -1184,6 +1212,11 @@ class LogicViewerDialog(wx.Dialog):
 
                 if len(in_edges) == 1:
                     src_id, src_port, _, _ = in_edges[0]
+                    if own_label and src_id in self._nodes:
+                        # Label the producing gate's output with the wire name.
+                        self._nodes[src_id]["out_labels"].setdefault(
+                            src_port, own_label
+                        )
                     for _, _, dst_id, dst_port in out_edges:
                         if dst_id in self._nodes:
                             self._edges.append(
@@ -1728,6 +1761,15 @@ class LogicViewerDialog(wx.Dialog):
                 gc.SetFont(lbl_font, port_col)
                 tw = gc.GetTextExtent(pname)[0]
                 gc.DrawText(pname, x + w - tw - 4, py - 9)
+
+        # Named wires (e.g. 'bob', 'bill') are labelled just above the output
+        # of the gate that produces them, in the wire colour.
+        out_labels = node["out_labels"]
+        if out_labels:
+            gc.SetFont(self._font(7), wx.Colour(40, 90, 170))
+            for pid, name in out_labels.items():
+                oy = self._out_y(node, pid)
+                gc.DrawText(name, ox + 12, oy - 15)
 
         # Clock triangle on the CLK input of a flip-flop
         if kind == "DTYPE" and n_in > 0:
