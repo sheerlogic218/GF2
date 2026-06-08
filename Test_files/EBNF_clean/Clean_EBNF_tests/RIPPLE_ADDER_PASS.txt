@@ -1,0 +1,37 @@
+// 3-bit asynchronous (ripple) counter.
+//
+// Each D-type is wired as a toggle flip-flop (DATA fed from its own QBAR), so
+// it flips on every rising edge of its clock. The first stage is driven by the
+// clock; each later stage is clocked by the previous stage's QBAR, so the carry
+// "ripples" up the chain and ff2 ff1 ff0 count upward in binary (000 .. 111).
+
+module ripple_counter : -> ;
+
+    clock clk [1] ;          // toggles every cycle -> a rising edge every 2
+    switch low = 0 ;         // holds the asynchronous SET/CLEAR inputs inactive
+
+    dtype ff0 ;              // bit 0 (least significant)
+    dtype ff1 ;              // bit 1
+    dtype ff2 ;              // bit 2 (most significant)
+
+    // Toggle wiring: feed each flip-flop's inverted output back to its data.
+    ff0.DATA <= ff0.QBAR ;
+    ff1.DATA <= ff1.QBAR ;
+    ff2.DATA <= ff2.QBAR ;
+
+    // Ripple clock chain: stage n is clocked by stage (n-1)'s QBAR.
+    ff0.CLK <= clk ;
+    ff1.CLK <= ff0.QBAR ;
+    ff2.CLK <= ff1.QBAR ;
+
+    // Disable the asynchronous set / clear on every flip-flop.
+    ff0.SET <= low ; ff0.CLEAR <= low ;
+    ff1.SET <= low ; ff1.CLEAR <= low ;
+    ff2.SET <= low ; ff2.CLEAR <= low ;
+
+    monitor clk ;
+    monitor ff0.Q ;
+    monitor ff1.Q ;
+    monitor ff2.Q ;
+
+end ;

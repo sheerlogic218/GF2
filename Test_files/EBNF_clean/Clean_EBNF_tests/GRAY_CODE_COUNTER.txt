@@ -1,0 +1,50 @@
+// 3-bit Gray-code counter.
+//
+// A synchronous binary counter (all flip-flops share one clock) drives a
+// binary-to-Gray converter. Counting binary 000 .. 111 and taking
+// G = B xor (B >> 1) gives the reflected Gray-code sequence
+//     000 001 011 010 110 111 101 100
+// in which exactly one output bit changes at each step.
+
+module gray_counter : -> ;
+
+    clock clk [1] ;
+    switch low = 0 ;        // holds the asynchronous SET/CLEAR inputs inactive
+
+    dtype b0 ;              // binary bit 0 (least significant)
+    dtype b1 ;              // binary bit 1
+    dtype b2 ;              // binary bit 2 (most significant)
+
+    // Synchronous binary up-counter from toggle (T) flip-flops:
+    //   bit 0 toggles every clock; bit n toggles when all lower bits are 1.
+    wire d1 ;
+    wire d2 ;
+    d1 = b1.Q ^ b0.Q ;            // toggle b1 when b0 = 1
+    d2 = b2.Q ^ (b0.Q * b1.Q) ;   // toggle b2 when b0 = b1 = 1
+
+    b0.DATA <= b0.QBAR ;
+    b1.DATA <= d1 ;
+    b2.DATA <= d2 ;
+
+    b0.CLK <= clk ;
+    b1.CLK <= clk ;
+    b2.CLK <= clk ;
+
+    b0.SET <= low ; b0.CLEAR <= low ;
+    b1.SET <= low ; b1.CLEAR <= low ;
+    b2.SET <= low ; b2.CLEAR <= low ;
+
+    // Binary -> Gray conversion: g2 = b2, g1 = b2 xor b1, g0 = b1 xor b0.
+    wire g0 ;
+    wire g1 ;
+    wire g2 ;
+    g2 = b2.Q ;
+    g1 = b2.Q ^ b1.Q ;
+    g0 = b1.Q ^ b0.Q ;
+
+    monitor clk ;
+    monitor g2 ;
+    monitor g1 ;
+    monitor g0 ;
+
+end ;
