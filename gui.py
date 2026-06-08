@@ -84,6 +84,10 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self._anim_total = None
         self._anim_base_step = 1.0
         self._anim_speed = 1.0
+        # When set, only the final N cycles are swept in (the earlier ones are
+        # shown fully drawn from the start) — used by Continue/+10 so only the
+        # newly added cycles animate. None means animate the whole trace.
+        self._anim_animate_last = None
         self._anim_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_anim_tick, self._anim_timer)
 
@@ -227,8 +231,16 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         if self._anim_reveal is not None:
             if self._anim_total is None:
                 self._anim_total = num_cycles
-                # Base pace ≈ 4 s for the full sweep at 1× (≈130 ticks @ 30 ms).
-                self._anim_base_step = max(0.2, num_cycles / 130.0)
+                # Continue/+10: start the playhead past the cycles that were
+                # already on screen so only the new ones sweep in.
+                if self._anim_animate_last is not None:
+                    self._anim_reveal = max(
+                        0.0, num_cycles - self._anim_animate_last
+                    )
+                # Base pace ≈ 4 s for a full sweep at 1× (≈130 ticks @ 30 ms);
+                # paced by the animated span so a short tail sweeps in quickly.
+                span = self._anim_total - self._anim_reveal
+                self._anim_base_step = max(0.2, span / 130.0)
             x_limit = box_x_start + self._anim_reveal * cycle_width
 
         # 4. Dynamic Multi-Row Channel Rendering Loop
@@ -482,14 +494,19 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
     # ── Progressive trace animation ──────────────────────────────────────────
 
-    def start_animation(self):
+    def start_animation(self, animate_last=None):
         """Begin sweeping the green trace in from the left over time.
 
         The displayed cycle count and per-tick step are latched lazily on the
         first render frame, so this works regardless of how many cycles run.
+
+        If ``animate_last`` is given, only that many cycles at the right-hand
+        end are swept in; everything before them is shown fully drawn from the
+        first frame (so Continue/+10 animates just the freshly added cycles).
         """
         self._anim_reveal = 0.0
         self._anim_total = None
+        self._anim_animate_last = animate_last
         self.init = False
         self.Refresh()
         self._anim_timer.Start(30)
@@ -689,6 +706,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         gui = wx.GetTopLevelParent(self)
         if gui and hasattr(gui, "update_scrollbars"):
             gui.update_scrollbars()
+        if gui and hasattr(gui, "on_reset_view"):
+            self.Bind(wx.EVT_MENU, gui.on_reset_view, reset_item)
 
         self.Bind(wx.EVT_MENU, self.on_save_image, save_item)
         self.Bind(wx.EVT_MENU, self.on_copy_image, copy_item)
@@ -818,6 +837,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         self._play_button_center = None
         self._play_button_radius = 0
 
+        self._right_did_pan = False
+        self._zoom_for_signals_applied = False
+
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
@@ -882,6 +904,12 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
     def render(self):
         """Render each monitor as a row of 3D cuboids along the time axis."""
         self.SetCurrent(self.context)
+        if not self._zoom_for_signals_applied:
+            n = len(self.monitors.monitors_dict)
+            if n > 0:
+                self.zoom = max(0.05, 8.0 / (2 ** (n - 1)))
+                self._zoom_for_signals_applied = True
+                self.init = False
         if not self.init:
             self.init_gl()
             self.init = True
@@ -1106,6 +1134,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             else:
                 self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
 
+        if event.ButtonDown(wx.MOUSE_BTN_RIGHT):
+            self._right_did_pan = False
+
         if event.ButtonDown():
             self.last_mouse_x = event.GetX()
             self.last_mouse_y = event.GetY()
@@ -1122,11 +1153,16 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             if event.RightIsDown():
                 self.pan_x += x
                 self.pan_y -= y
+                self._right_did_pan = True
             GL.glMultMatrixf(self.scene_rotate)
             GL.glGetFloatv(GL.GL_MODELVIEW_MATRIX, self.scene_rotate)
             self.last_mouse_x = event.GetX()
             self.last_mouse_y = event.GetY()
             self.init = False
+
+        if event.ButtonUp(wx.MOUSE_BTN_RIGHT) and not self._right_did_pan:
+            self._show_context_menu()
+            return
 
         wheel = event.GetWheelRotation()
         if wheel < 0:
@@ -1151,6 +1187,66 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             else:
                 GLUT.glutBitmapCharacter(font, ord(ch))
         GL.glEnable(GL.GL_LIGHTING)
+
+    def _show_context_menu(self):
+        """Show a right-click context menu with view and image options."""
+        menu = wx.Menu()
+        reset_item = menu.Append(wx.ID_ANY, _("Reset View"))
+        menu.AppendSeparator()
+        save_item = menu.Append(wx.ID_ANY, _("Save Image..."))
+        copy_item = menu.Append(wx.ID_ANY, _("Copy Image"))
+        self.Bind(wx.EVT_MENU, self._on_reset_view, reset_item)
+        self.Bind(wx.EVT_MENU, self._on_save_image, save_item)
+        self.Bind(wx.EVT_MENU, self._on_copy_image, copy_item)
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _on_reset_view(self, event):
+        """Reset 3D view to the default angle, pan and zoom."""
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.zoom = 8.0
+        self.scene_rotate = np.identity(4, "f")
+        self._initial_rotate_done = False
+        self._zoom_for_signals_applied = False
+        self.init = False
+        self.Refresh()
+
+    def _capture_bitmap(self):
+        """Capture the current 3D canvas contents as a wx.Bitmap."""
+        size = self.GetClientSize()
+        bitmap = wx.Bitmap(size.width, size.height)
+        dc = wx.MemoryDC(bitmap)
+        dc.Blit(0, 0, size.width, size.height, wx.ClientDC(self), 0, 0)
+        dc.SelectObject(wx.NullBitmap)
+        return bitmap
+
+    def _on_save_image(self, event):
+        """Save the 3D canvas contents to an image file."""
+        wildcard = _("PNG files (*.png)|*.png|JPEG files (*.jpg)|*.jpg")
+        dlg = wx.FileDialog(
+            self,
+            _("Save Image"),
+            wildcard=wildcard,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            path = dlg.GetPath()
+            fmt = (
+                wx.BITMAP_TYPE_JPEG
+                if path.endswith(".jpg")
+                else wx.BITMAP_TYPE_PNG
+            )
+            self._capture_bitmap().SaveFile(path, fmt)
+        dlg.Destroy()
+
+    def _on_copy_image(self, event):
+        """Copy the 3D canvas contents to the clipboard."""
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(
+                wx.BitmapDataObject(self._capture_bitmap())
+            )
+            wx.TheClipboard.Close()
 
     def _maybe_draw_start_overlay(self, canvas_width, canvas_height):
         """Draw the large play button unless a simulation has already run."""
@@ -3468,10 +3564,11 @@ class Gui(wx.Frame):
             )
             self.log(_("Completed %d total cycles.") % self.cycles_completed)
         self.update_monitors_list()
-        # Draw the extended trace progressively (skippable) in the 2D view.
+        # Draw only the freshly added cycles progressively (skippable) in the
+        # 2D view, leaving the previously drawn cycles in place.
         if not self._is_3d and self.cycles_completed > 0:
             self.canvas.set_animation_speed(self._current_anim_speed())
-            self.canvas.start_animation()
+            self.canvas.start_animation(animate_last=cycles)
         self._render_canvas()
 
     def on_switch_on(self, event):
@@ -3548,6 +3645,7 @@ class Gui(wx.Frame):
                 self.monitors.monitors_dict[key] = real
             self.SetStatusText(_("Added monitor: %s") % signal_name)
             self.log(_("Added monitor: %s") % signal_name)
+            self._auto_reset_view()
         elif monitor_error == self.monitors.MONITOR_PRESENT:
             self.SetStatusText(_("Monitor already active: %s") % signal_name)
         else:
@@ -3735,8 +3833,8 @@ class Gui(wx.Frame):
             pos_y, v_thumb, range_max, v_thumb, refresh=True
         )
 
-    def on_reset_view(self, event):
-        """Reset all view parameters back to defaults and refresh canvas."""
+    def _auto_reset_view(self):
+        """Reset both canvases to defaults without logging (called on signal changes)."""
         self.canvas.zoom = 1.0
         self.canvas.x_zoom = 1.0
         self.canvas.pan_x_pct = 0.0
@@ -3746,8 +3844,21 @@ class Gui(wx.Frame):
         self.canvas.init = False
         self.x_zoom_slider.SetValue(1)
         self.x_zoom_value_label.SetLabel("1×")
-        self.canvas.Refresh()
+        self.canvas3d.pan_x = 0.0
+        self.canvas3d.pan_y = 0.0
+        self.canvas3d.scene_rotate = np.identity(4, "f")
+        self.canvas3d._initial_rotate_done = False
+        self.canvas3d._zoom_for_signals_applied = False
+        self.canvas3d.init = False
         self.update_scrollbars()
+
+    def on_reset_view(self, _event):
+        """Reset all view parameters back to defaults and refresh canvas."""
+        self._auto_reset_view()
+        if self._is_3d:
+            self.canvas3d.Refresh()
+        else:
+            self.canvas.Refresh()
         self.SetStatusText(_("View reset to default dimensions."))
         self.log(_("View reset to default dimensions."))
 
