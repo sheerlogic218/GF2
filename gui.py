@@ -70,6 +70,11 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         self._drag_monitor_src = None
         self._drag_monitor_dst = None
 
+        # "Press play to simulate" start overlay hit-test (screen pixels).
+        # Set while the overlay is drawn, cleared otherwise.
+        self._play_button_center = None
+        self._play_button_radius = 0
+
         # Initialise variables for zooming
         self.zoom = 1.0
         self.x_zoom = 1.0
@@ -147,8 +152,13 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(box_x_start, box_y_top)
         GL.glEnd()
 
+        # Nothing drawn yet: clear any stale overlay hit-test region.
+        self._play_button_center = None
+        self._play_button_radius = 0
+
         num_monitors = len(self.monitors.monitors_dict)
         if num_monitors == 0:
+            self._maybe_draw_start_overlay(canvas_width, canvas_height)
             GL.glFlush()
             self.SwapBuffers()
             return
@@ -193,7 +203,8 @@ class MyGLCanvas(wxcanvas.GLCanvas):
                 label = str(i)
                 self.render_text(label, x - len(label) * 3.5, label_y)
         else:
-            # Safely exit if no simulation cycles have run yet
+            # No simulation cycles have run yet – invite the user to start.
+            self._maybe_draw_start_overlay(canvas_width, canvas_height)
             GL.glFlush()
             self.SwapBuffers()
             return
@@ -293,6 +304,69 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glFlush()
         self.SwapBuffers()
 
+    def _maybe_draw_start_overlay(self, canvas_width, canvas_height):
+        """Draw the large play button unless a simulation has already run."""
+        gui = wx.GetTopLevelParent(self)
+        if gui is not None and getattr(gui, "cycles_completed", 0) > 0:
+            return
+        self._draw_start_overlay(canvas_width, canvas_height)
+
+    def _draw_start_overlay(self, canvas_width, canvas_height):
+        """Render a large central play button and a 'press play' prompt.
+
+        The button is centred in the visible viewport. Because the visible
+        viewport maps onto the full canvas, the button always sits at the
+        screen centre in pixels, so hit-testing uses fixed pixel coordinates
+        while the GL drawing is scaled by the current zoom.
+        """
+        zoom = getattr(self, "zoom", 1.0)
+        visible_width = canvas_width / zoom
+        visible_height = canvas_height / zoom
+        cx = self.pan_x + visible_width / 2
+        cy = self.pan_y + visible_height / 2
+
+        radius_px = 46  # button radius in screen pixels
+        r = radius_px / zoom
+
+        # Filled disc (button background).
+        GL.glColor3f(0.13, 0.65, 0.32)
+        GL.glBegin(GL.GL_TRIANGLE_FAN)
+        GL.glVertex2f(cx, cy)
+        for deg in range(0, 361, 10):
+            rad = math.radians(deg)
+            GL.glVertex2f(cx + r * math.cos(rad), cy + r * math.sin(rad))
+        GL.glEnd()
+
+        # Outline ring.
+        GL.glColor3f(0.85, 0.95, 0.88)
+        GL.glLineWidth(2.0)
+        GL.glBegin(GL.GL_LINE_LOOP)
+        for deg in range(0, 360, 10):
+            rad = math.radians(deg)
+            GL.glVertex2f(cx + r * math.cos(rad), cy + r * math.sin(rad))
+        GL.glEnd()
+        GL.glLineWidth(1.0)
+
+        # White play triangle (shifted slightly right for optical centring).
+        t = r * 0.42
+        tx = cx + r * 0.08
+        GL.glColor3f(1.0, 1.0, 1.0)
+        GL.glBegin(GL.GL_TRIANGLES)
+        GL.glVertex2f(tx - t * 0.7, cy - t)
+        GL.glVertex2f(tx - t * 0.7, cy + t)
+        GL.glVertex2f(tx + t, cy)
+        GL.glEnd()
+
+        # Prompt text centred below the button (bitmap font: fixed pixels).
+        label = _("To simulate press play")
+        text_x = cx - (len(label) * 6.0) / 2 / zoom
+        text_y = cy + r + 22 / zoom
+        self.render_text(label, text_x, text_y)
+
+        # Record screen-pixel hit region (button is centred on the canvas).
+        self._play_button_center = (canvas_width / 2, canvas_height / 2)
+        self._play_button_radius = radius_px
+
     def _signal_trace_segments(
         self, signal_list, x_start, cycle_width, high_y, low_y
     ):
@@ -351,6 +425,15 @@ class MyGLCanvas(wxcanvas.GLCanvas):
     def _in_label_area(self, screen_x):
         """Return True if screen_x is within the row-label column."""
         return self.pan_x + screen_x / self.zoom < 80
+
+    def _point_in_play_button(self, screen_x, screen_y):
+        """Return True if a screen-pixel point is on the start overlay button."""
+        if self._play_button_center is None:
+            return False
+        cx, cy = self._play_button_center
+        return (screen_x - cx) ** 2 + (
+            screen_y - cy
+        ) ** 2 <= self._play_button_radius**2
 
     def on_paint(self, event):
         """Handle the paint event by validating the DC and calling render."""
@@ -417,6 +500,11 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         elif event.ButtonDown(wx.MOUSE_BTN_LEFT):
             mx, my = event.GetPosition()
             self.last_mouse_x, self.last_mouse_y = mx, my
+            # Click on the central "press play" overlay runs the simulation.
+            if self._point_in_play_button(mx, my):
+                if gui and hasattr(gui, "on_run_button"):
+                    gui.on_run_button(None)
+                return
             if self._in_label_area(mx):
                 row = self._get_monitor_row(mx, my)
                 if row >= 0:
@@ -439,7 +527,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         elif event.Moving():
             mx, my = event.GetPosition()
-            if (
+            if self._point_in_play_button(mx, my):
+                self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+            elif (
                 len(self.monitors.monitors_dict) > 0
                 and self._in_label_area(mx)
                 and self._get_monitor_row(mx, my) >= 0

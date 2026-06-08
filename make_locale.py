@@ -190,6 +190,7 @@ TRANSLATIONS_FR = {
     "Low": "Bas",
     "HIGH": "HAUT",
     "LOW": "BAS",
+    "To simulate press play": "Pour simuler, appuyez sur lecture",
 
     # ── Monitor list suffix ───────────────────────────────────────────────────
     " (on)": " (actif)",
