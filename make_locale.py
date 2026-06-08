@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate locale/fr/LC_MESSAGES/logsim.mo from embedded French translations.
+"""Generate locale .mo files from embedded translations.
 
-Run this script once to (re)build the binary translation catalog:
+Run once to (re)build all binary translation catalogs:
     python make_locale.py
 """
 
@@ -108,6 +108,9 @@ TRANSLATIONS_FR = {
 
     # ── Status bar – static messages ─────────────────────────────────────────
     "Ready": "Prêt",
+    "3D view enabled — drag to rotate, scroll to zoom.":
+        "Vue 3D activée — glisser pour pivoter, molette pour zoomer.",
+    "2D view enabled.": "Vue 2D activée.",
     "File viewer opened.": "Visionneuse ouverte.",
     "File viewer closed.": "Visionneuse fermée.",
     "Error: network oscillating.": "Erreur : réseau oscillant.",
@@ -184,6 +187,9 @@ TRANSLATIONS_FR = {
     "No file is open - nothing to implement.":
         "Aucun fichier ouvert — rien à implémenter.",
     "Implement Error": "Erreur d'implémentation",
+    "Please implement a circuit file first.":
+        "Veuillez d'abord implémenter un fichier de circuit.",
+    "No Circuit": "Pas de circuit",
     "Could not implement this file because it contains errors.":
         "Impossible d'implémenter ce fichier car il contient des erreurs.",
     "File Viewer — error": "Visionneuse — erreur",
@@ -237,7 +243,7 @@ TRANSLATIONS_FR = {
         "   - Drag to pan, scroll to zoom, and use the -/+/Fit buttons.\n\n"
         "5. Language & View Options:\n"
         "   - Use the language selector (next to '3D') to switch between\n"
-        "     English and French.\n"
+        "     English, French and Greek.\n"
         "   - Toggle the live text definition panel under View -> Show File Viewer."
     ): (
         "Bienvenue dans le Simulateur Logique !\n\n"
@@ -270,8 +276,280 @@ TRANSLATIONS_FR = {
         "   - Glissez pour déplacer, molette pour zoomer, et boutons -/+/Ajuster.\n\n"
         "5. Options de langue et d'affichage :\n"
         "   - Utilisez le sélecteur de langue (à côté de « 3D ») pour basculer entre\n"
-        "     le français et l'anglais.\n"
+        "     l'anglais, le français et le grec.\n"
         "   - Activez le panneau de définition sous Vue → Afficher la visionneuse."
+    ),
+}
+
+
+TRANSLATIONS_EL = {
+    # GNU gettext metadata
+    "": (
+        "Content-Type: text/plain; charset=UTF-8\n"
+        "Content-Transfer-Encoding: 8bit\n"
+        "Language: el\n"
+    ),
+
+    # ── Menus ────────────────────────────────────────────────────────────────
+    "&File": "&Αρχείο",
+    "&Open": "&Άνοιγμα",
+    "&Save": "&Αποθήκευση",
+    "&About": "&Σχετικά",
+    "&Exit": "&Έξοδος",
+    "&View": "&Προβολή",
+    "&Show File Viewer\tCtrl+Shift+F": "&Εμφάνιση προβολής αρχείου\tCtrl+Shift+F",
+    "&Help": "&Βοήθεια",
+    "&Documentation": "&Τεκμηρίωση",
+
+    # ── AUI pane captions ────────────────────────────────────────────────────
+    "Simulation": "Προσομοίωση",
+    "Switches": "Διακόπτες",
+    "Monitors": "Παρακολουθητές",
+    "Console": "Κονσόλα",
+
+    # ── Widget labels ────────────────────────────────────────────────────────
+    "Cycles": "Κύκλοι",
+    "Last": "Τελευταίοι",
+    "Select switch:": "Επιλογή διακόπτη:",
+    "Switch": "Διακόπτης",
+    "Value": "Τιμή",
+    "Monitors:": "Παρακολουθητές:",
+    "X Zoom:": "Ζουμ Χ:",
+
+    # ── Buttons ──────────────────────────────────────────────────────────────
+    "ON": "Ενεργό",
+    "OFF": "Ανενεργό",
+    "Save": "Αποθήκευση",
+    "Implement": "Υλοποίηση",
+    "File Viewer": "Προβολή Αρχείου",
+    "Skip": "Παράλειψη",
+
+    # ── Logic Viewer ─────────────────────────────────────────────────────────
+    "Logic Viewer": "Λογική Προβολή",
+    "Fit": "Προσαρμογή",
+    "Zoom out": "Σμίκρυνση",
+    "Zoom in": "Μεγέθυνση",
+    "Reset zoom to fit": "Επαναφορά ζουμ",
+    "Scroll to zoom • drag to pan":
+        "Κύλιση για ζουμ • σύρε για μετακίνηση",
+    "No circuit implemented yet.":
+        "Δεν έχει υλοποιηθεί κύκλωμα ακόμα.",
+    "Move selected monitor up": "Μετακίνηση επιλεγμένου πάνω",
+    "Move selected monitor down": "Μετακίνηση επιλεγμένου κάτω",
+
+    # ── Tooltips ─────────────────────────────────────────────────────────────
+    "Run the simulation from scratch for %d cycles":
+        "Εκτέλεση προσομοίωσης από την αρχή για %d κύκλους",
+    "Continue the simulation for %d additional cycles":
+        "Συνέχιση προσομοίωσης για %d επιπλέον κύκλους",
+    "Reset the simulation to its initial state":
+        "Επαναφορά προσομοίωσης στην αρχική κατάσταση",
+    "Skip the trace drawing animation":
+        "Παράλειψη κινούμενης απεικόνισης",
+    "Trace drawing animation speed":
+        "Ταχύτητα κινούμενης απεικόνισης",
+    "Click a switch to select it, then use ON / OFF":
+        "Κλικ σε διακόπτη για επιλογή, μετά Ενεργό / Ανενεργό",
+    "Set the selected switch to ON (1)":
+        "Ενεργοποίηση επιλεγμένου διακόπτη (1)",
+    "Set the selected switch to OFF (0)":
+        "Απενεργοποίηση επιλεγμένου διακόπτη (0)",
+    "Add a monitor to the selected signal":
+        "Προσθήκη παρακολουθητή στο επιλεγμένο σήμα",
+    "Remove the selected monitor":
+        "Αφαίρεση επιλεγμένου παρακολουθητή",
+    "Number of cycles to run or continue":
+        "Αριθμός κύκλων για εκτέλεση ή συνέχιση",
+    "Show only the most recent cycles":
+        "Εμφάνιση μόνο των πιο πρόσφατων κύκλων",
+    "Number of recent cycles to show":
+        "Αριθμός πρόσφατων κύκλων για εμφάνιση",
+    "Save changes to file":
+        "Αποθήκευση αλλαγών στο αρχείο",
+    "Run the simulator using this file":
+        "Εκτέλεση προσομοιωτή με αυτό το αρχείο",
+    "Close file viewer":
+        "Κλείσιμο προβολής αρχείου",
+    "Change interface language":
+        "Αλλαγή γλώσσας διεπαφής",
+    "Switch to 3D signal view":
+        "Μετάβαση σε τρισδιάστατη προβολή",
+    "Switch back to 2D signal view":
+        "Επιστροφή σε δισδιάστατη προβολή",
+    "Show gate-level circuit diagram":
+        "Εμφάνιση διαγράμματος κυκλώματος",
+
+    # ── Status bar – static messages ─────────────────────────────────────────
+    "Ready": "Έτοιμο",
+    "3D view enabled — drag to rotate, scroll to zoom.":
+        "Τρισδιάστατη προβολή ενεργή — σύρε για περιστροφή, κύλιση για ζουμ.",
+    "2D view enabled.": "Δισδιάστατη προβολή ενεργή.",
+    "File viewer opened.": "Η προβολή αρχείου άνοιξε.",
+    "File viewer closed.": "Η προβολή αρχείου έκλεισε.",
+    "Error: network oscillating.": "Σφάλμα: δίκτυο ταλαντεύεται.",
+    "Showing all recorded cycles.": "Εμφάνιση όλων των καταγεγραμμένων κύκλων.",
+    "Error: nothing to continue. Run first.":
+        "Σφάλμα: τίποτα για συνέχιση. Εκτελέστε πρώτα.",
+    "Error: please select a switch first.":
+        "Σφάλμα: επιλέξτε πρώτα έναν διακόπτη.",
+    "Error: please select a signal first.":
+        "Σφάλμα: επιλέξτε πρώτα ένα σήμα.",
+    "Error: please select a monitor first.":
+        "Σφάλμα: επιλέξτε πρώτα έναν παρακολουθητή.",
+    "Error: selected signal was not found.":
+        "Σφάλμα: το επιλεγμένο σήμα δεν βρέθηκε.",
+    "Simulation reset.": "Επαναφορά προσομοίωσης.",
+    "View reset to default dimensions.":
+        "Επαναφορά προβολής στις προεπιλεγμένες διαστάσεις.",
+    "Implement failed: parse errors in file.":
+        "Αποτυχία υλοποίησης: σφάλματα ανάλυσης στο αρχείο.",
+
+    # ── Status bar – format strings ───────────────────────────────────────────
+    "Running for %d cycles...": "Εκτέλεση για %d κύκλους...",
+    "Completed %d cycles.": "Ολοκληρώθηκαν %d κύκλοι.",
+    "Continuing for %d cycles...": "Συνέχεια για %d κύκλους...",
+    "Showing last %d cycles.": "Εμφάνιση τελευταίων %d κύκλων.",
+    "Added monitor: %s": "Παρακολουθητής προστέθηκε: %s",
+    "Monitor already active: %s": "Παρακολουθητής ήδη ενεργός: %s",
+    "Error: could not add monitor %s":
+        "Σφάλμα: αδύνατη προσθήκη παρακολουθητή %s",
+    "Removed monitor: %s": "Παρακολουθητής αφαιρέθηκε: %s",
+    "Error: monitor is not active: %s":
+        "Σφάλμα: ο παρακολουθητής δεν είναι ενεργός: %s",
+    "Switch %s set ON.": "Διακόπτης %s ενεργοποιήθηκε.",
+    "Switch %s set OFF.": "Διακόπτης %s απενεργοποιήθηκε.",
+    "Error: could not set switch %s.":
+        "Σφάλμα: αδύνατη ρύθμιση διακόπτη %s.",
+    "Saved: %s": "Αποθηκεύτηκε: %s",
+    "Opened: %s": "Άνοιξε: %s",
+    "Implemented: %s": "Υλοποιήθηκε: %s",
+    "Implement failed: parse errors in %s":
+        "Αποτυχία υλοποίησης: σφάλματα ανάλυσης στο %s",
+
+    # ── Console log messages ──────────────────────────────────────────────────
+    "File saved: %s": "Αρχείο αποθηκεύτηκε: %s",
+    "Implemented file: %s": "Αρχείο υλοποιήθηκε: %s",
+    "Opened file: %s": "Αρχείο άνοιξε: %s",
+    "New spin control value: %d": "Νέα τιμή ελέγχου: %d",
+    "Run clicked: %d cycles requested.": "Εκτέλεση: ζητήθηκαν %d κύκλοι.",
+    "Completed %d total cycles.": "Ολοκληρώθηκαν %d κύκλοι συνολικά.",
+    "Continue ignored: run the simulation first.":
+        "Η συνέχεια αγνοήθηκε: εκτελέστε πρώτα.",
+    "Continue clicked: %d cycles requested.": "Συνέχεια: ζητήθηκαν %d κύκλοι.",
+
+    # ── Dialogs ──────────────────────────────────────────────────────────────
+    "About Logic Simulator": "Σχετικά με τον Λογικό Προσομοιωτή",
+    (
+        "Logic Simulator\nGF2 Software Project\n"
+        "Cambridge University Engineering Department\n2026"
+    ): (
+        "Λογικός Προσομοιωτής\nΕργασία Λογισμικού GF2\n"
+        "Τμήμα Μηχανικής Πανεπιστημίου Cambridge\n2026"
+    ),
+    "GUI Usage Guide": "Οδηγός Χρήσης",
+    "Open circuit definition file":
+        "Άνοιγμα αρχείου ορισμού κυκλώματος",
+    "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*":
+        "Αρχεία ορισμού (*.txt)|*.txt|Όλα τα αρχεία (*.*)|*.*",
+    "Save Image": "Αποθήκευση Εικόνας",
+    "PNG files (*.png)|*.png|JPEG files (*.jpg)|*.jpg":
+        "Αρχεία PNG (*.png)|*.png|Αρχεία JPEG (*.jpg)|*.jpg",
+    "No file is open — nothing to save.":
+        "Δεν είναι ανοιχτό αρχείο — τίποτα να αποθηκευτεί.",
+    "Save Error": "Σφάλμα Αποθήκευσης",
+    "No file is open - nothing to implement.":
+        "Δεν είναι ανοιχτό αρχείο — τίποτα να υλοποιηθεί.",
+    "Implement Error": "Σφάλμα Υλοποίησης",
+    "Please implement a circuit file first.":
+        "Παρακαλώ υλοποιήστε πρώτα ένα αρχείο κυκλώματος.",
+    "No Circuit": "Χωρίς κύκλωμα",
+    "Could not implement this file because it contains errors.":
+        "Δεν ήταν δυνατή η υλοποίηση επειδή το αρχείο περιέχει σφάλματα.",
+    "File Viewer — error": "Προβολή αρχείου — σφάλμα",
+    "Could not save file:\n%s": "Δεν ήταν δυνατή η αποθήκευση:\n%s",
+    "Could not open file:\n%s": "Δεν ήταν δυνατό το άνοιγμα:\n%s",
+
+    # ── Canvas labels (rendered via OpenGL) ──────────────────────────────────
+    "High": "Υψηλό",
+    "Low": "Χαμηλό",
+    "HIGH": "ΥΨΗΛΟ",
+    "LOW": "ΧΑΜΗΛΟ",
+    "To simulate press play": "Για προσομοίωση πατήστε play",
+
+    # ── Monitor list suffix ───────────────────────────────────────────────────
+    " (on)": " (ενεργό)",
+
+    # ── Context menu ─────────────────────────────────────────────────────────
+    "Reset View": "Επαναφορά Προβολής",
+    "Save Image...": "Αποθήκευση Εικόνας...",
+    "Copy Image": "Αντιγραφή Εικόνας",
+
+    # ── Help dialog ───────────────────────────────────────────────────────────
+    (
+        "Welcome to the Logic Simulator!\n\n"
+        "Here is a summary of the available interface functions:\n\n"
+        "1. Simulation Controls:\n"
+        "   - Use the spin box to set the number of cycles to run or continue.\n"
+        "   - Click '▶' to start or restart the simulation from zero.\n"
+        "   - Click '+N' to continue running N further cycles.\n"
+        "   - Click '↺' to clear the current history and reset the network.\n"
+        "   - Tick 'Last' and set a number to show only the most recent cycles.\n\n"
+        "2. Interacting with the Canvas:\n"
+        "   - Drag with the Left Mouse Button to pan across the logic waveforms.\n"
+        "   - Scroll the Mouse Wheel to zoom in/out on active lines.\n"
+        "   - Use the 'X Zoom' slider to stretch the time axis horizontally.\n"
+        "   - Right-click inside the canvas to copy or save a snapshot image.\n"
+        "   - Click '3D' for a three-dimensional view of the signals (drag to\n"
+        "     rotate, scroll to zoom); click '2D' to switch back.\n\n"
+        "3. Switches & Monitors:\n"
+        "   - Select a switch from the list and toggle it with 'ON' / 'OFF'.\n"
+        "   - Add (+) or remove (-) signals using the Monitors list.\n"
+        "   - Reorder monitors with the up/down arrows.\n"
+        "   - A monitor added mid-run shows the signal's history for the\n"
+        "     cycles before it was monitored.\n\n"
+        "4. Logic Viewer:\n"
+        "   - Click 'Logic Viewer' to open the gate-level circuit diagram.\n"
+        "   - Gates use standard symbols with their names inside; a single-input\n"
+        "     NAND is shown as a NOT (inverter), and an AND/OR feeding an\n"
+        "     inverter is merged into a NAND/NOR gate.\n"
+        "   - Wires leave each gate from its output, beside the inversion bubble.\n"
+        "   - Drag to pan, scroll to zoom, and use the -/+/Fit buttons.\n\n"
+        "5. Language & View Options:\n"
+        "   - Use the language selector (next to '3D') to switch between\n"
+        "     English, French and Greek.\n"
+        "   - Toggle the live text definition panel under View -> Show File Viewer."
+    ): (
+        "Καλώς ήρθατε στον Λογικό Προσομοιωτή!\n\n"
+        "Σύνοψη διαθέσιμων λειτουργιών:\n\n"
+        "1. Στοιχεία ελέγχου προσομοίωσης:\n"
+        "   - Χρησιμοποιήστε το πλαίσιο αριθμού για να ορίσετε τους κύκλους.\n"
+        "   - Κλικ '▶' για εκκίνηση ή επανεκκίνηση από την αρχή.\n"
+        "   - Κλικ '+N' για συνέχεια N επιπλέον κύκλων.\n"
+        "   - Κλικ '↺' για εκκαθάριση ιστορικού και επαναφορά δικτύου.\n"
+        "   - Τσεκάρετε 'Τελευταίοι' για εμφάνιση μόνο πρόσφατων κύκλων.\n\n"
+        "2. Αλληλεπίδραση με τον καμβά:\n"
+        "   - Σύρετε με το αριστερό κουμπί ποντικιού για μετακίνηση.\n"
+        "   - Κυλήστε τη ρόδα για μεγέθυνση/σμίκρυνση.\n"
+        "   - Χρησιμοποιήστε το ρυθμιστικό 'Ζουμ Χ' για οριζόντια τέντωση.\n"
+        "   - Δεξί κλικ για αντιγραφή ή αποθήκευση εικόνας.\n"
+        "   - Κλικ '3D' για τρισδιάστατη προβολή (σύρσιμο για περιστροφή,\n"
+        "     κύλιση για ζουμ)· κλικ '2D' για επιστροφή.\n\n"
+        "3. Διακόπτες και παρακολουθητές:\n"
+        "   - Επιλέξτε διακόπτη και εναλλάξτε με 'ON' / 'OFF'.\n"
+        "   - Προσθέστε (+) ή αφαιρέστε (-) σήματα από τη λίστα παρακολουθητών.\n"
+        "   - Αναδιατάξτε παρακολουθητές με τα βέλη πάνω/κάτω.\n"
+        "   - Παρακολουθητής που προστίθεται εν μέσω εκτέλεσης εμφανίζει\n"
+        "     το ιστορικό σήματος για τους προηγούμενους κύκλους.\n\n"
+        "4. Λογική Προβολή:\n"
+        "   - Κλικ 'Λογική Προβολή' για το διάγραμμα κυκλώματος.\n"
+        "   - Οι πύλες χρησιμοποιούν τυπικά σύμβολα· μια NAND μίας εισόδου\n"
+        "     εμφανίζεται ως NOT, και AND/OR που τροφοδοτεί αναστροφέα\n"
+        "     συγχωνεύεται σε NAND/NOR.\n"
+        "   - Σύρσιμο για μετακίνηση, κύλιση για ζουμ, κουμπιά -/+/Προσαρμογή.\n\n"
+        "5. Επιλογές γλώσσας και προβολής:\n"
+        "   - Χρησιμοποιήστε τον επιλογέα γλώσσας για εναλλαγή μεταξύ\n"
+        "     Αγγλικών, Γαλλικών και Ελληνικών.\n"
+        "   - Εναλλαγή ζωντανού πίνακα ορισμού μέσω Προβολή → Εμφάνιση προβολής αρχείου."
     ),
 }
 
@@ -332,8 +610,13 @@ def generate_mo(translations: dict, filepath: str) -> None:
 
 
 if __name__ == "__main__":
-    out = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "locale", "fr", "LC_MESSAGES", "logsim.mo",
+    base = os.path.dirname(os.path.abspath(__file__))
+
+    generate_mo(
+        TRANSLATIONS_FR,
+        os.path.join(base, "locale", "fr", "LC_MESSAGES", "logsim.mo"),
     )
-    generate_mo(TRANSLATIONS_FR, out)
+    generate_mo(
+        TRANSLATIONS_EL,
+        os.path.join(base, "locale", "el", "LC_MESSAGES", "logsim.mo"),
+    )

@@ -2609,15 +2609,16 @@ class Gui(wx.Frame):
             self.x_zoom_value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
         )
 
-        # Language selector – switch the UI between English and French.
+        # Language selector – switch the UI between English, French and Greek.
         self._languages = [
             ("English", wx.LANGUAGE_ENGLISH),
             ("Français", wx.LANGUAGE_FRENCH),
+            ("Ελληνικά", wx.LANGUAGE_GREEK),
         ]
         self._lang_choice = wx.Choice(
             self.canvas_panel,
             choices=[name for name, _lang in self._languages],
-            size=(96, 26),
+            size=(110, 26),
         )
         self._lang_choice.SetToolTip(_("Change interface language"))
         self._lang_choice.SetSelection(self._current_language_index())
@@ -4097,7 +4098,7 @@ class Gui(wx.Frame):
             "   - Drag to pan, scroll to zoom, and use the -/+/Fit buttons.\n\n"
             "5. Language & View Options:\n"
             "   - Use the language selector (next to '3D') to switch between\n"
-            "     English and French.\n"
+            "     English, French and Greek.\n"
             "   - Toggle the live text definition panel under View -> Show File Viewer."
         )
 
