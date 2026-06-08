@@ -952,8 +952,17 @@ class LogicViewerDialog(wx.Dialog):
     _OUTLINE = wx.Colour(0, 0, 0)
     _TEXT = wx.Colour(15, 15, 15)
     _kinds = (
-        "AND", "OR", "NAND", "NOR", "XOR", "NOT",
-        "CLOCK", "SWITCH", "DTYPE", "WIRE", "UNKNOWN",
+        "AND",
+        "OR",
+        "NAND",
+        "NOR",
+        "XOR",
+        "NOT",
+        "CLOCK",
+        "SWITCH",
+        "DTYPE",
+        "WIRE",
+        "UNKNOWN",
     )
     # dict.fromkeys (not a comprehension) so the class-scope colours resolve.
     _BG = dict.fromkeys(_kinds, _FILL)
@@ -986,6 +995,7 @@ class LogicViewerDialog(wx.Dialog):
         self._names = names
         self._nodes = {}  # device_id → node dict
         self._edges = []  # (src_id, src_port_id, dst_id, dst_port_id)
+        self._routes = {}  # edge tuple → [(x, y), …] dummy waypoints
         self._zoom = 1.0
         self._pan_anchor = None  # (mouse_x, mouse_y, scroll_x, scroll_y)
 
@@ -1285,22 +1295,21 @@ class LogicViewerDialog(wx.Dialog):
 
     # ── layout ──────────────────────────────────────────────────────────────
 
+    _DUMMY_H = 8  # routing-node slot height (keeps wires clear of gate boxes)
+
     def _layout(self):
+        self._routes = {}
         if not self._nodes:
             return
 
+        # 1. Longest-path layer assignment (handles back-edges gracefully).
         succs = {nid: [] for nid in self._nodes}
-        preds = {nid: [] for nid in self._nodes}
         for src, _sp, dst, _dp in self._edges:
             if src != dst and src in self._nodes and dst in self._nodes:
                 if dst not in succs[src]:
                     succs[src].append(dst)
-                if src not in preds[dst]:
-                    preds[dst].append(src)
-
-        # 1. Longest-path layer assignment (handles back-edges gracefully).
         layer = {nid: 0 for nid in self._nodes}
-        for _ in range(len(self._nodes)):
+        for _pass in range(len(self._nodes)):
             changed = False
             for nid in self._nodes:
                 for suc in succs[nid]:
@@ -1312,79 +1321,196 @@ class LogicViewerDialog(wx.Dialog):
         for nid in self._nodes:
             self._nodes[nid]["layer"] = layer[nid]
 
+        # 2. Split every multi-layer edge with chains of dummy routing nodes,
+        #    so each segment spans a single layer (the standard Sugiyama trick:
+        #    it lets the wire weave between gates instead of cutting through).
+        dummies = {}  # dummy_id → {"layer", "y"}
+        chain = {}  # edge tuple → [node/dummy ids from src … dst]
+        adj_prev = (
+            {}
+        )  # id → ids one layer left  (for ordering / straightening)
+        adj_next = {}
+        counter = [0]
+
+        def link(a, b):
+            adj_next.setdefault(a, []).append(b)
+            adj_prev.setdefault(b, []).append(a)
+
+        for edge in self._edges:
+            src, _sp, dst, _dp = edge
+            if src not in self._nodes or dst not in self._nodes:
+                chain[edge] = []
+                continue
+            lo, hi = layer[src], layer[dst]
+            if hi - lo <= 1:
+                chain[edge] = [src, dst]
+                if hi - lo == 1:
+                    link(src, dst)
+                continue
+            prev = src
+            ids = [src]
+            for li in range(lo + 1, hi):
+                did = ("dummy", counter[0])
+                counter[0] += 1
+                dummies[did] = {"layer": li, "y": 0.0}
+                ids.append(did)
+                link(prev, did)
+                prev = did
+            ids.append(dst)
+            link(prev, dst)
+            chain[edge] = ids
+
+        def lay(i):
+            return (
+                self._nodes[i]["layer"]
+                if i in self._nodes
+                else dummies[i]["layer"]
+            )
+
+        def hgt(i):
+            return self._nodes[i]["h"] if i in self._nodes else self._DUMMY_H
+
+        def gety(i):
+            return (self._nodes[i] if i in self._nodes else dummies[i])["y"]
+
+        def sety(i, val):
+            (self._nodes[i] if i in self._nodes else dummies[i])["y"] = val
+
+        all_ids = list(self._nodes) + list(dummies)
         order = {}
-        for nid in self._nodes:
-            order.setdefault(layer[nid], []).append(nid)
-        layer_ids = sorted(order.keys())
+        for i in all_ids:
+            order.setdefault(lay(i), []).append(i)
+        layer_ids = sorted(order)
 
-        # 2. Crossing reduction: order each layer by the median position of
-        #    its neighbours in the adjacent layer (Sugiyama median heuristic).
-        def median(nid, pos, neigh):
-            idxs = sorted(pos[x] for x in neigh[nid] if x in pos)
-            if not idxs:
-                return None
-            m = len(idxs)
+        # 3. Crossing reduction over the split graph: weighted-median sweeps.
+        def median(i, pos, neigh):
+            idx = sorted(pos[x] for x in neigh.get(i, []) if x in pos)
+            if not idx:
+                return -1.0
+            m = len(idx)
             if m % 2:
-                return float(idxs[m // 2])
-            return (idxs[m // 2 - 1] + idxs[m // 2]) / 2.0
+                return float(idx[m // 2])
+            if m == 2:
+                return (idx[0] + idx[1]) / 2.0
+            lft = idx[m // 2 - 1] - idx[0]
+            rgt = idx[-1] - idx[m // 2]
+            if lft + rgt == 0:
+                return (idx[m // 2 - 1] + idx[m // 2]) / 2.0
+            return (idx[m // 2 - 1] * rgt + idx[m // 2] * lft) / (lft + rgt)
 
-        for sweep in range(10):
+        def count_between(la, lb):
+            posL = {n: k for k, n in enumerate(order[la])}
+            seq = []
+            for n in order[lb]:
+                seq.extend(
+                    sorted(posL[u] for u in adj_prev.get(n, []) if u in posL)
+                )
+            cross = 0
+            for a in range(len(seq)):
+                for b in range(a + 1, len(seq)):
+                    if seq[a] > seq[b]:
+                        cross += 1
+            return cross
+
+        for sweep in range(12):
             down = sweep % 2 == 0
             seq = layer_ids[1:] if down else list(reversed(layer_ids[:-1]))
             for li in seq:
                 adj = li - 1 if down else li + 1
                 if adj not in order:
                     continue
-                pos = {nid: i for i, nid in enumerate(order[adj])}
-                neigh = preds if down else succs
+                pos = {n: k for k, n in enumerate(order[adj])}
+                neigh = adj_prev if down else adj_next
                 keys = {}
-                for i, nid in enumerate(order[li]):
-                    mk = median(nid, pos, neigh)
-                    keys[nid] = i if mk is None else mk
-                order[li].sort(key=lambda nid: keys[nid])
+                for k, n in enumerate(order[li]):
+                    mk = median(n, pos, neigh)
+                    keys[n] = k if mk < 0 else mk
+                order[li].sort(key=lambda n: keys[n])
 
-        # 3. Initial vertical stacking in the resolved order.
-        for li in layer_ids:
-            y = float(self._PAD)
-            for nid in order[li]:
-                self._nodes[nid]["y"] = y
-                y += self._nodes[nid]["h"] + self._ROW_GAP
-
-        # 4. Straighten wires: pull each node toward the average centre of its
-        #    neighbours, then push apart any overlaps while keeping order.
-        for _ in range(16):
+        # 4. Transpose: swap adjacent nodes while it removes crossings. This
+        #    clears the avoidable "cross twice" cases the median pass leaves.
+        improved = True
+        guard = 0
+        while improved and guard < 40:
+            improved = False
+            guard += 1
             for li in layer_ids:
-                for nid in order[li]:
-                    neigh = preds[nid] + succs[nid]
-                    centres = [
-                        self._nodes[m]["y"] + self._nodes[m]["h"] / 2.0
-                        for m in neigh
-                        if m in self._nodes
-                    ]
-                    if centres:
-                        target = sum(centres) / len(centres)
-                        self._nodes[nid]["y"] = (
-                            target - self._nodes[nid]["h"] / 2.0
-                        )
-                self._resolve_overlaps(order[li])
+                row = order[li]
+                for k in range(len(row) - 1):
+                    before = 0
+                    if li - 1 in order:
+                        before += count_between(li - 1, li)
+                    if li + 1 in order:
+                        before += count_between(li, li + 1)
+                    row[k], row[k + 1] = row[k + 1], row[k]
+                    after = 0
+                    if li - 1 in order:
+                        after += count_between(li - 1, li)
+                    if li + 1 in order:
+                        after += count_between(li, li + 1)
+                    if after < before:
+                        improved = True
+                    else:
+                        row[k], row[k + 1] = row[k + 1], row[k]
 
-        # Normalise so the topmost node sits at the padding margin.
-        min_y = min(n["y"] for n in self._nodes.values())
+        # 5. Initial vertical stacking, then straighten toward neighbour centres.
+        for li in layer_ids:
+            yy = float(self._PAD)
+            for i in order[li]:
+                sety(i, yy)
+                yy += hgt(i) + self._ROW_GAP
+
+        def resolve(row):
+            for k in range(1, len(row)):
+                mn = gety(row[k - 1]) + hgt(row[k - 1]) + self._ROW_GAP
+                if gety(row[k]) < mn:
+                    sety(row[k], mn)
+
+        for _it in range(20):
+            for li in layer_ids:
+                for i in order[li]:
+                    nb = adj_prev.get(i, []) + adj_next.get(i, [])
+                    cs = [gety(m) + hgt(m) / 2.0 for m in nb]
+                    if cs:
+                        sety(i, sum(cs) / len(cs) - hgt(i) / 2.0)
+                resolve(order[li])
+
+        min_y = min(gety(i) for i in all_ids)
         shift = self._PAD - min_y
-        for n in self._nodes.values():
-            n["y"] = int(round(n["y"] + shift))
+        for i in all_ids:
+            sety(i, gety(i) + shift)
+        for node in self._nodes.values():
+            node["y"] = int(round(node["y"]))
 
-        # 5. Horizontal columns: each layer gets enough room for its widest box.
+        # 6. Horizontal columns: each layer gets room for its widest real box.
         layer_x = {}
+        layer_w = {}
         x_cursor = self._PAD
         for li in layer_ids:
             layer_x[li] = x_cursor
-            widest = max(self._nodes[nid]["w"] for nid in order[li])
+            widest = max(
+                (self._nodes[i]["w"] for i in order[li] if i in self._nodes),
+                default=20,
+            )
+            layer_w[li] = widest
             x_cursor += widest + self._LAYER_GAP
         for nid, node in self._nodes.items():
             node["x"] = layer_x[node["layer"]]
 
-        # 6. Assign each commutative gate's input slots in the vertical order
+        # 7. Build wire routes: each dummy adds a horizontal pair spanning its
+        #    column at the (gap) dummy-y, so wires cross gate columns flat and
+        #    only slope inside the empty gutters between columns.
+        for edge in self._edges:
+            ids = chain.get(edge, [])
+            wp = []
+            for i in ids[1:-1]:
+                li = dummies[i]["layer"]
+                dy = dummies[i]["y"] + self._DUMMY_H / 2.0
+                wp.append((layer_x[li] - 8, dy))
+                wp.append((layer_x[li] + layer_w[li] + 8, dy))
+            self._routes[edge] = wp
+
+        # 8. Assign each commutative gate's input slots in the vertical order
         #    of their sources, removing avoidable crossings right at the gate.
         self._order_gate_inputs()
 
@@ -1407,20 +1533,13 @@ class LogicViewerDialog(wx.Dialog):
             def slot_key(pid):
                 s = feeders.get(pid)
                 if s is None or s not in self._nodes:
-                    return float("inf")  # unconnected inputs sink to the bottom
+                    return float(
+                        "inf"
+                    )  # unconnected inputs sink to the bottom
                 sn = self._nodes[s]
                 return sn["y"] + sn["h"] / 2.0
 
             node["in_ports"] = sorted(node["in_ports"], key=slot_key)
-
-    def _resolve_overlaps(self, nids):
-        """Push nodes (already in vertical order) apart to remove overlap."""
-        for i in range(1, len(nids)):
-            prev = self._nodes[nids[i - 1]]
-            cur = self._nodes[nids[i]]
-            min_y = prev["y"] + prev["h"] + self._ROW_GAP
-            if cur["y"] < min_y:
-                cur["y"] = min_y
 
     # ── scrolling / zoom ────────────────────────────────────────────────────
 
@@ -1548,26 +1667,40 @@ class LogicViewerDialog(wx.Dialog):
             gc.DrawText(_("No circuit implemented yet."), self._PAD, self._PAD)
             return
 
-        # Wires (drawn beneath nodes), routed between the port stub tips and
-        # drawn semi-transparent so overlapping runs stay legible.
+        # Wires (drawn beneath nodes), routed from the output point through any
+        # dummy waypoints to the input stub. Waypoint pairs cross gate columns
+        # flat (in a gap); gutter spans curve smoothly. Semi-transparent so
+        # overlapping runs stay legible.
         wire_pen = gc.CreatePen(
             wx.GraphicsPenInfo(wx.Colour(40, 90, 170, 210)).Width(1.6 / z)
         )
         gc.SetPen(wire_pen)
-        for src_id, src_port, dst_id, dst_port in self._edges:
+        for edge in self._edges:
+            src_id, src_port, dst_id, dst_port = edge
             sn = self._nodes.get(src_id)
             dn = self._nodes.get(dst_id)
             if sn is None or dn is None:
                 continue
-            sx, sy = self._out_anchor(sn, src_port)  # output point (mid/tip)
-            dx, dy = self._in_anchor(dn, dst_port)  # input stub tip
-            # Horizontal control points give a smooth S-curve that leaves and
-            # arrives horizontally, matching the stub direction.
-            c1 = sx + max(24, (dx - sx) * 0.5)
-            c2 = dx - max(24, (dx - sx) * 0.5)
+            pts = (
+                [self._out_anchor(sn, src_port)]
+                + self._routes.get(edge, [])
+                + [self._in_anchor(dn, dst_port)]
+            )
             path = gc.CreatePath()
-            path.MoveToPoint(sx, sy)
-            path.AddCurveToPoint(c1, sy, c2, dy, dx, dy)
+            path.MoveToPoint(*pts[0])
+            for i in range(len(pts) - 1):
+                x1, y1 = pts[i]
+                x2, y2 = pts[i + 1]
+                if abs(y1 - y2) < 0.5:
+                    path.AddLineToPoint(x2, y2)  # flat column crossing
+                else:
+                    # Smooth S inside the empty gutter (horizontal control
+                    # points keep x monotone so it never enters a column).
+                    d = max(16, abs(x2 - x1) * 0.5)
+                    s = 1.0 if x2 >= x1 else -1.0
+                    path.AddCurveToPoint(
+                        x1 + s * d, y1, x2 - s * d, y2, x2, y2
+                    )
             gc.StrokePath(path)
 
         for node in self._nodes.values():
@@ -1720,12 +1853,16 @@ class LogicViewerDialog(wx.Dialog):
                     gc.SetFont(self._font(8, bold=True), self._TEXT)
                     s = self._fit_text(gc, node["short"], win)
                     sw2 = gc.GetTextExtent(s)[0]
-                    gc.DrawText(s, cx - sw2 / 2, y + h / 2 - (13 if both else 6))
+                    gc.DrawText(
+                        s, cx - sw2 / 2, y + h / 2 - (13 if both else 6)
+                    )
                 if node["label"]:
                     gc.SetFont(self._font(7), wx.Colour(60, 60, 60))
                     lab = self._fit_text(gc, node["label"], win)
                     lw2 = gc.GetTextExtent(lab)[0]
-                    gc.DrawText(lab, cx - lw2 / 2, y + h / 2 - (1 if both else 6))
+                    gc.DrawText(
+                        lab, cx - lw2 / 2, y + h / 2 - (1 if both else 6)
+                    )
 
         stub_pen = gc.CreatePen(
             wx.GraphicsPenInfo(wx.Colour(0, 0, 0)).Width(1.4 / z)
