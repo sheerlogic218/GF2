@@ -814,6 +814,10 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         self.last_mouse_y = 0
         self.scene_rotate = np.identity(4, "f")
 
+        # "Press play to simulate" start overlay hit-test (screen pixels).
+        self._play_button_center = None
+        self._play_button_radius = 0
+
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
@@ -884,8 +888,18 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
 
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
 
+        # Recomputed each frame by the start overlay when (and only when) it
+        # is drawn; cleared first so the hit region vanishes once a sim runs.
+        self._play_button_center = None
+        self._play_button_radius = 0
+
+        size = self.GetClientSize()
+        canvas_width = max(1, size.width)
+        canvas_height = max(1, size.height)
+
         monitors_dict = self.monitors.monitors_dict
         if not monitors_dict:
+            self._maybe_draw_start_overlay(canvas_width, canvas_height)
             GL.glFlush()
             self.SwapBuffers()
             return
@@ -905,6 +919,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
 
         max_cycles = max((len(v) for v in visible.values()), default=0)
         if max_cycles == 0:
+            self._maybe_draw_start_overlay(canvas_width, canvas_height)
             GL.glFlush()
             self.SwapBuffers()
             return
@@ -1075,6 +1090,22 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         """Left-drag rotates; right-drag pans; scroll wheel zooms."""
         self.SetCurrent(self.context)
 
+        # Click on the central "press play" overlay runs the simulation.
+        if event.ButtonDown(wx.MOUSE_BTN_LEFT) and self._point_in_play_button(
+            event.GetX(), event.GetY()
+        ):
+            gui = wx.GetTopLevelParent(self)
+            if gui and hasattr(gui, "on_run_button"):
+                gui.on_run_button(None)
+            return
+
+        # Hand cursor while hovering the overlay button.
+        if event.Moving():
+            if self._point_in_play_button(event.GetX(), event.GetY()):
+                self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+            else:
+                self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+
         if event.ButtonDown():
             self.last_mouse_x = event.GetX()
             self.last_mouse_y = event.GetY()
@@ -1120,6 +1151,93 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             else:
                 GLUT.glutBitmapCharacter(font, ord(ch))
         GL.glEnable(GL.GL_LIGHTING)
+
+    def _maybe_draw_start_overlay(self, canvas_width, canvas_height):
+        """Draw the large play button unless a simulation has already run."""
+        gui = wx.GetTopLevelParent(self)
+        if gui is not None and getattr(gui, "cycles_completed", 0) > 0:
+            return
+        self._draw_start_overlay(canvas_width, canvas_height)
+
+    def _draw_start_overlay(self, canvas_width, canvas_height):
+        """Render a large central play button and a 'press play' prompt.
+
+        The 3D scene uses a perspective projection, so the overlay swaps in a
+        temporary pixel-space orthographic projection. Drawing therefore
+        happens directly in screen pixels (no zoom scaling), and the same
+        pixel coordinates are reused for hit-testing.
+        """
+        cx = canvas_width / 2.0
+        cy = canvas_height / 2.0
+        r = 46  # button radius in screen pixels
+
+        # Switch to a pixel-space orthographic projection (y increases down).
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glPushMatrix()
+        GL.glLoadIdentity()
+        GL.glOrtho(0, canvas_width, canvas_height, 0, -1, 1)
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glPushMatrix()
+        GL.glLoadIdentity()
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+
+        # Filled disc (button background).
+        GL.glColor3f(0.13, 0.65, 0.32)
+        GL.glBegin(GL.GL_TRIANGLE_FAN)
+        GL.glVertex2f(cx, cy)
+        for deg in range(0, 361, 10):
+            rad = math.radians(deg)
+            GL.glVertex2f(cx + r * math.cos(rad), cy + r * math.sin(rad))
+        GL.glEnd()
+
+        # Outline ring.
+        GL.glColor3f(0.85, 0.95, 0.88)
+        GL.glLineWidth(2.0)
+        GL.glBegin(GL.GL_LINE_LOOP)
+        for deg in range(0, 360, 10):
+            rad = math.radians(deg)
+            GL.glVertex2f(cx + r * math.cos(rad), cy + r * math.sin(rad))
+        GL.glEnd()
+        GL.glLineWidth(1.0)
+
+        # White play triangle (shifted slightly right for optical centring).
+        t = r * 0.42
+        tx = cx + r * 0.08
+        GL.glColor3f(1.0, 1.0, 1.0)
+        GL.glBegin(GL.GL_TRIANGLES)
+        GL.glVertex2f(tx - t * 0.7, cy - t)
+        GL.glVertex2f(tx - t * 0.7, cy + t)
+        GL.glVertex2f(tx + t, cy)
+        GL.glEnd()
+
+        # Prompt text centred below the button (bitmap font: fixed pixels).
+        label = _("To simulate press play")
+        text_x = cx - (len(label) * 6.0) / 2
+        text_y = cy + r + 22
+        GL.glColor3f(0.85, 0.92, 1.0)
+        self.render_text(label, text_x, text_y, 0)
+
+        # Restore the perspective projection and 3D render state.
+        GL.glEnable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_LIGHTING)
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glPopMatrix()
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glPopMatrix()
+
+        # Record screen-pixel hit region (button is centred on the canvas).
+        self._play_button_center = (cx, cy)
+        self._play_button_radius = r
+
+    def _point_in_play_button(self, screen_x, screen_y):
+        """Return True if a screen-pixel point is on the start overlay button."""
+        if self._play_button_center is None:
+            return False
+        cx, cy = self._play_button_center
+        return (screen_x - cx) ** 2 + (
+            screen_y - cy
+        ) ** 2 <= self._play_button_radius**2
 
 
 class LogicViewerDialog(wx.Dialog):
@@ -3350,6 +3468,10 @@ class Gui(wx.Frame):
             )
             self.log(_("Completed %d total cycles.") % self.cycles_completed)
         self.update_monitors_list()
+        # Draw the extended trace progressively (skippable) in the 2D view.
+        if not self._is_3d and self.cycles_completed > 0:
+            self.canvas.set_animation_speed(self._current_anim_speed())
+            self.canvas.start_animation()
         self._render_canvas()
 
     def on_switch_on(self, event):
