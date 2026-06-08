@@ -839,6 +839,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
 
         self._right_did_pan = False
         self._zoom_for_signals_applied = False
+        self.x_zoom = 1.0
 
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
@@ -952,7 +953,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             self.SwapBuffers()
             return
 
-        CYCLE_W = 18.0
+        CYCLE_W = 18.0 * self.x_zoom
         LANE_D = 65.0
         TRACE_DEPTH = 22.0
         HIGH_H = 22.0
@@ -1210,6 +1211,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         self._initial_rotate_done = False
         self._zoom_for_signals_applied = False
         self.init = False
+        gui = wx.GetTopLevelParent(self)
+        if gui and hasattr(gui, "_apply_auto_x_zoom"):
+            gui._apply_auto_x_zoom()
         self.Refresh()
 
     def _capture_bitmap(self):
@@ -2482,9 +2486,9 @@ class Gui(wx.Frame):
         # X-axis zoom slider
         self.x_zoom_slider = wx.Slider(
             self.canvas_panel,
-            value=1,
+            value=10,
             minValue=1,
-            maxValue=30,
+            maxValue=300,
             style=wx.SL_HORIZONTAL,
         )
         self.x_zoom_value_label = wx.StaticText(self.canvas_panel, label="1×")
@@ -3527,6 +3531,7 @@ class Gui(wx.Frame):
             self.SetStatusText(_("Completed %d cycles.") % cycles)
             self.log(_("Completed %d cycles.") % cycles)
         self.update_monitors_list()
+        self._apply_auto_x_zoom()
         # Draw the trace progressively (skippable) in the 2D view.
         if not self._is_3d and self.cycles_completed > 0:
             self.canvas.set_animation_speed(self._current_anim_speed())
@@ -3788,11 +3793,18 @@ class Gui(wx.Frame):
     def on_x_zoom(self, event):
         """Handle x-axis zoom slider changes."""
         val = self.x_zoom_slider.GetValue()
-        self.x_zoom_value_label.SetLabel(f"{val}×")
-        self.canvas.x_zoom = float(val)
+        x_zoom = val / 10.0
+        label = f"{x_zoom:.0f}×" if x_zoom >= 1 else f"{x_zoom:.1f}×"
+        self.x_zoom_value_label.SetLabel(label)
+        self.canvas.x_zoom = max(1.0, x_zoom)
         self.canvas.init = False
+        self.canvas3d.x_zoom = x_zoom
+        self.canvas3d.init = False
         self.update_scrollbars()
-        self.canvas.Refresh()
+        if self._is_3d:
+            self.canvas3d.Refresh()
+        else:
+            self.canvas.Refresh()
 
     def on_zoom_in(self, event):
         """Zoom in by 10%."""
@@ -3834,24 +3846,38 @@ class Gui(wx.Frame):
             pos_y, v_thumb, range_max, v_thumb, refresh=True
         )
 
+    def _apply_auto_x_zoom(self):
+        """Auto-set x_zoom to normalise the view to ~10 cycles of horizontal space."""
+        if self.cycles_completed > 0:
+            auto_x_zoom = max(0.1, min(30.0, 10.0 / self.cycles_completed))
+        else:
+            auto_x_zoom = 1.0
+        slider_val = max(1, min(300, round(auto_x_zoom * 10)))
+        x_zoom = slider_val / 10.0
+        label = f"{x_zoom:.0f}×" if x_zoom >= 1 else f"{x_zoom:.1f}×"
+        self.x_zoom_slider.SetValue(slider_val)
+        self.x_zoom_value_label.SetLabel(label)
+        self.canvas.x_zoom = max(1.0, x_zoom)
+        self.canvas.init = False
+        self.canvas3d.x_zoom = x_zoom
+        self.canvas3d.init = False
+        self.update_scrollbars()
+
     def _auto_reset_view(self):
         """Reset both canvases to defaults without logging (called on signal changes)."""
         self.canvas.zoom = 1.0
-        self.canvas.x_zoom = 1.0
         self.canvas.pan_x_pct = 0.0
         self.canvas.pan_y_pct = 0.0
         self.canvas.pan_x = 0.0
         self.canvas.pan_y = 0.0
         self.canvas.init = False
-        self.x_zoom_slider.SetValue(1)
-        self.x_zoom_value_label.SetLabel("1×")
         self.canvas3d.pan_x = 0.0
         self.canvas3d.pan_y = 0.0
         self.canvas3d.scene_rotate = np.identity(4, "f")
         self.canvas3d._initial_rotate_done = False
         self.canvas3d._zoom_for_signals_applied = False
         self.canvas3d.init = False
-        self.update_scrollbars()
+        self._apply_auto_x_zoom()
 
     def on_reset_view(self, _event):
         """Reset all view parameters back to defaults and refresh canvas."""
