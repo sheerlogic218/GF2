@@ -2963,7 +2963,7 @@ class Gui(wx.Frame):
 
         # ── Inner splitter split ─────────────────────────────────────────────
         self.splitter.SplitHorizontally(self.top_panel, self.canvas_panel, 180)
-        self.splitter.SetMinimumPaneSize(150)
+        self.splitter.SetMinimumPaneSize(175)
 
         # ── Left-pane sizer wraps the inner splitter ─────────────────────────
         left_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3746,6 +3746,7 @@ class Gui(wx.Frame):
             return
 
         device_id, output_id = signal_ids
+        clean_signal_name = self.names.prettify_name(signal_name)
         monitor_error = self.monitors.make_monitor(
             device_id, output_id, self.cycles_completed
         )
@@ -3762,14 +3763,14 @@ class Gui(wx.Frame):
                         self.cycles_completed - len(real)
                     ) + real
                 self.monitors.monitors_dict[key] = real
-            self.SetStatusText(_("Added monitor: %s") % signal_name)
-            self.log(_("Added monitor: %s") % signal_name)
+            self.SetStatusText(_("Added monitor: %s") % clean_signal_name)
+            self.log(_("Added monitor: %s") % clean_signal_name)
             self._auto_reset_view()
         elif monitor_error == self.monitors.MONITOR_PRESENT:
-            self.SetStatusText(_("Monitor already active: %s") % signal_name)
+            self.SetStatusText(_("Monitor already active: %s") % clean_signal_name)
         else:
             self.SetStatusText(
-                _("Error: could not add monitor %s") % signal_name
+                _("Error: could not add monitor %s") % clean_signal_name
             )
         self.update_monitors_list()
         self._render_canvas()
@@ -3789,13 +3790,14 @@ class Gui(wx.Frame):
             return
 
         device_id, output_id = signal_ids
+        clean_signal_name = self.names.prettify_name(signal_name)
         if self.monitors.remove_monitor(device_id, output_id):
-            self.SetStatusText(_("Removed monitor: %s") % signal_name)
-            self.log(_("Removed monitor: %s") % signal_name)
+            self.SetStatusText(_("Removed monitor: %s") % clean_signal_name)
+            self.log(_("Removed monitor: %s") % clean_signal_name)
             self._auto_reset_view()
         else:
             self.SetStatusText(
-                _("Error: monitor is not active: %s") % signal_name
+                _("Error: monitor is not active: %s") % clean_signal_name
             )
         self.update_monitors_list()
         self._render_canvas()
@@ -4040,10 +4042,18 @@ class Gui(wx.Frame):
             "   - Toggle the live text definition panel under View -> Show File Viewer."
         )
 
-        # Create and display the modal information dialogue box
-        dlg = wx.MessageDialog(
-            self, help_text, _("GUI Usage Guide"), wx.OK | wx.ICON_INFORMATION
-        )
+        # Create and display a scrollable information dialogue box
+        dlg = wx.Dialog(self, title=_("GUI Usage Guide"), size=(520, 440),
+                        style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        txt = wx.TextCtrl(dlg, value=help_text,
+                          style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.BORDER_NONE)
+        txt.SetBackgroundColour(dlg.GetBackgroundColour())
+        sizer.Add(txt, 1, wx.EXPAND | wx.ALL, 10)
+        btn = wx.Button(dlg, wx.ID_OK)
+        btn.SetDefault()
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 8)
+        dlg.SetSizer(sizer)
         dlg.ShowModal()
         dlg.Destroy()
 
