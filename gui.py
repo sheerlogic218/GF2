@@ -841,6 +841,15 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         self._zoom_for_signals_applied = False
         self.x_zoom = 1.0
 
+        # Progressive animation state (mirrors MyGLCanvas)
+        self._anim_reveal = None
+        self._anim_total = None
+        self._anim_base_step = 1.0
+        self._anim_speed = 1.0
+        self._anim_animate_last = None
+        self._anim_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_anim_tick, self._anim_timer)
+
         self.Bind(wx.EVT_PAINT, self.on_paint)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOUSE_EVENTS, self.on_mouse)
@@ -953,6 +962,19 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             self.SwapBuffers()
             return
 
+        # Latch animation state on the first render after start_animation().
+        cycle_limit = None
+        if self._anim_reveal is not None:
+            if self._anim_total is None:
+                self._anim_total = max_cycles
+                if self._anim_animate_last is not None:
+                    self._anim_reveal = max(
+                        0.0, max_cycles - self._anim_animate_last
+                    )
+                span = self._anim_total - self._anim_reveal
+                self._anim_base_step = max(0.2, span / 130.0)
+            cycle_limit = self._anim_reveal
+
         CYCLE_W = 18.0 * self.x_zoom
         LANE_D = 65.0
         TRACE_DEPTH = 22.0
@@ -972,6 +994,8 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             self.render_text(clean_name, x_label, 5, z_center)
 
             for i, state in enumerate(sig_values):
+                if cycle_limit is not None and i >= cycle_limit:
+                    break
                 x_c = (i - max_cycles / 2.0 + 0.5) * CYCLE_W
                 if state == self.devices.HIGH:
                     h = HIGH_H
@@ -1064,6 +1088,34 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             GL.glColor3f(r * 0.9, g * 0.9, b * 0.9)
             self.render_text(_("HIGH"), x_hi + 6, -6 + HIGH_H, z_c)
             self.render_text(_("LOW"), x_hi + 6, -6 + LOW_H, z_c)
+
+        # Translucent playhead plane at the animation frontier.
+        if cycle_limit is not None and cycle_limit < max_cycles:
+            x_play = x_lo + cycle_limit * CYCLE_W
+            top_y = -6 + HIGH_H + 5
+            GL.glDisable(GL.GL_CULL_FACE)
+            GL.glEnable(GL.GL_BLEND)
+            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+            GL.glDepthMask(GL.GL_FALSE)
+            GL.glColor4f(0.9, 1.0, 0.6, 0.15)
+            GL.glBegin(GL.GL_QUADS)
+            GL.glVertex3f(x_play, floor_y, z_lo)
+            GL.glVertex3f(x_play, top_y, z_lo)
+            GL.glVertex3f(x_play, top_y, z_hi)
+            GL.glVertex3f(x_play, floor_y, z_hi)
+            GL.glEnd()
+            GL.glDepthMask(GL.GL_TRUE)
+            GL.glDisable(GL.GL_BLEND)
+            GL.glEnable(GL.GL_CULL_FACE)
+            GL.glColor3f(0.9, 1.0, 0.6)
+            GL.glLineWidth(2.0)
+            GL.glBegin(GL.GL_LINE_LOOP)
+            GL.glVertex3f(x_play, floor_y, z_lo)
+            GL.glVertex3f(x_play, top_y, z_lo)
+            GL.glVertex3f(x_play, top_y, z_hi)
+            GL.glVertex3f(x_play, floor_y, z_hi)
+            GL.glEnd()
+            GL.glLineWidth(1.0)
 
         GL.glEnable(GL.GL_LIGHTING)
         GL.glFlush()
@@ -1214,6 +1266,51 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         gui = wx.GetTopLevelParent(self)
         if gui and hasattr(gui, "_apply_auto_x_zoom"):
             gui._apply_auto_x_zoom()
+        self.Refresh()
+
+    # ── Progressive trace animation ──────────────────────────────────────────
+
+    def start_animation(self, animate_last=None):
+        """Begin sweeping cuboids in from the left over time."""
+        self._anim_reveal = 0.0
+        self._anim_total = None
+        self._anim_animate_last = animate_last
+        self.init = False
+        self.Refresh()
+        self._anim_timer.Start(30)
+
+    def skip_animation(self):
+        """Jump straight to the fully drawn scene."""
+        if self._anim_timer.IsRunning():
+            self._anim_timer.Stop()
+        self._anim_reveal = None
+        self._anim_total = None
+        self.init = False
+        self.Refresh()
+
+    def is_animating(self):
+        """Return True while the scene is still being drawn in."""
+        return self._anim_reveal is not None
+
+    def set_animation_speed(self, multiplier):
+        """Set the playback speed multiplier (e.g. 0.5, 1, 2, 5)."""
+        if multiplier > 0:
+            self._anim_speed = float(multiplier)
+
+    def _on_anim_tick(self, event):
+        """Advance the playhead one step and request a repaint."""
+        if self._anim_reveal is None:
+            self._anim_timer.Stop()
+            return
+        if self._anim_total is None:
+            self.Refresh()
+            return
+        self._anim_reveal += self._anim_base_step * self._anim_speed
+        if self._anim_reveal >= self._anim_total:
+            self._anim_reveal = None
+            self._anim_total = None
+            self._anim_timer.Stop()
+        self.init = False
         self.Refresh()
 
     def _capture_bitmap(self):
@@ -3532,10 +3629,15 @@ class Gui(wx.Frame):
             self.log(_("Completed %d cycles.") % cycles)
         self.update_monitors_list()
         self._apply_auto_x_zoom()
-        # Draw the trace progressively (skippable) in the 2D view.
-        if not self._is_3d and self.cycles_completed > 0:
-            self.canvas.set_animation_speed(self._current_anim_speed())
-            self.canvas.start_animation()
+        # Draw the trace progressively (skippable) in both 2D and 3D views.
+        if self.cycles_completed > 0:
+            speed = self._current_anim_speed()
+            if not self._is_3d:
+                self.canvas.set_animation_speed(speed)
+                self.canvas.start_animation()
+            else:
+                self.canvas3d.set_animation_speed(speed)
+                self.canvas3d.start_animation()
         self._render_canvas()
 
     def _current_anim_speed(self):
@@ -3547,11 +3649,14 @@ class Gui(wx.Frame):
 
     def on_speed_change(self, event):
         """Apply the chosen animation speed (live, even mid-draw)."""
-        self.canvas.set_animation_speed(self._current_anim_speed())
+        speed = self._current_anim_speed()
+        self.canvas.set_animation_speed(speed)
+        self.canvas3d.set_animation_speed(speed)
 
     def on_skip_animation(self, event):
         """Skip the progressive trace-drawing animation, showing it in full."""
         self.canvas.skip_animation()
+        self.canvas3d.skip_animation()
 
     def on_continue_button(self, event):
         """Handle the event when the user clicks the continue button."""
@@ -3569,11 +3674,15 @@ class Gui(wx.Frame):
             )
             self.log(_("Completed %d total cycles.") % self.cycles_completed)
         self.update_monitors_list()
-        # Draw only the freshly added cycles progressively (skippable) in the
-        # 2D view, leaving the previously drawn cycles in place.
-        if not self._is_3d and self.cycles_completed > 0:
-            self.canvas.set_animation_speed(self._current_anim_speed())
-            self.canvas.start_animation(animate_last=cycles)
+        # Draw only the freshly added cycles progressively in both views.
+        if self.cycles_completed > 0:
+            speed = self._current_anim_speed()
+            if not self._is_3d:
+                self.canvas.set_animation_speed(speed)
+                self.canvas.start_animation(animate_last=cycles)
+            else:
+                self.canvas3d.set_animation_speed(speed)
+                self.canvas3d.start_animation(animate_last=cycles)
         self._render_canvas()
 
     def on_switch_on(self, event):
