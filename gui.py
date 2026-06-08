@@ -1651,6 +1651,13 @@ class Gui(wx.Frame):
         self.monitors = monitors
         self.cycles_completed = 0
 
+        # Shadow recording of EVERY output signal for each completed cycle,
+        # kept GUI-side (read-only backend queries). Lets a monitor added
+        # mid-run show the real signal history for the cycles before it was
+        # monitored, instead of blank placeholders. Keyed by
+        # (device_id, output_id) -> [signal per cycle].
+        self._full_history = {}
+
         # ── Menu bar ────────────────────────────────────────────────────────
         fileMenu = wx.Menu()
         fileMenu.Append(wx.ID_OPEN, _("&Open"))
@@ -2535,6 +2542,7 @@ class Gui(wx.Frame):
             self.monitors,
         )
         new_gui.cycles_completed = self.cycles_completed
+        new_gui._full_history = self._full_history
         if was_maximized:
             new_gui.Maximize(True)
         else:
@@ -2617,11 +2625,26 @@ class Gui(wx.Frame):
         for _cycle in range(cycles):
             if self.network.execute_network():
                 self.monitors.record_signals()
+                self._record_full_history()
             else:
                 self.SetStatusText(_("Error: network oscillating."))
                 self.log(_("Error: network oscillating."))
                 return False
         return True
+
+    def _record_full_history(self):
+        """Snapshot every output signal for the current cycle (GUI-side).
+
+        Read-only: queries the network without touching backend state, so a
+        monitor added later can be backfilled with the real past trace.
+        """
+        for device_id in self.devices.find_devices():
+            device = self.devices.get_device(device_id)
+            for output_id in device.outputs:
+                key = (device_id, output_id)
+                self._full_history.setdefault(key, []).append(
+                    self.network.get_output_signal(device_id, output_id)
+                )
 
     def archive_current_traces(self):
         """Store current monitor traces for the next cycle-windowed run view."""
@@ -2705,6 +2728,7 @@ class Gui(wx.Frame):
         self.archive_current_traces()
         self.cycles_completed = 0
         self.monitors.reset_monitors()
+        self._full_history = {}
         self.devices.cold_startup()
         if self.run_network(cycles):
             self.cycles_completed = cycles
@@ -2791,6 +2815,18 @@ class Gui(wx.Frame):
             device_id, output_id, self.cycles_completed
         )
         if monitor_error == self.monitors.NO_ERROR:
+            # Replace the blank back-fill with the real pre-monitoring trace
+            # captured in the GUI-side shadow history, so the signal shows its
+            # actual values for the cycles before it was monitored.
+            key = (device_id, output_id)
+            past = self._full_history.get(key)
+            if past:
+                real = list(past[: self.cycles_completed])
+                if len(real) < self.cycles_completed:
+                    real = [self.devices.BLANK] * (
+                        self.cycles_completed - len(real)
+                    ) + real
+                self.monitors.monitors_dict[key] = real
             self.SetStatusText(_("Added monitor: %s") % signal_name)
             self.log(_("Added monitor: %s") % signal_name)
         elif monitor_error == self.monitors.MONITOR_PRESENT:
@@ -2884,6 +2920,7 @@ class Gui(wx.Frame):
         """Handle the event when the user clicks the reset button."""
         self.cycles_completed = 0
         self.monitors.reset_monitors()
+        self._full_history = {}
         self.canvas.previous_signal_traces = {}
         self.canvas3d.previous_signal_traces = {}
         self.devices.cold_startup()
