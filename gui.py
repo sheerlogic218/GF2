@@ -907,7 +907,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         if not self._zoom_for_signals_applied:
             n = len(self.monitors.monitors_dict)
             if n > 0:
-                self.zoom = max(0.05, 8.0 / (2 ** (n - 1)))
+                self.zoom = max(0.05, 16.0 / (n + 1))
                 self._zoom_for_signals_applied = True
                 self.init = False
         if not self.init:
@@ -3673,6 +3673,7 @@ class Gui(wx.Frame):
         if self.monitors.remove_monitor(device_id, output_id):
             self.SetStatusText(_("Removed monitor: %s") % signal_name)
             self.log(_("Removed monitor: %s") % signal_name)
+            self._auto_reset_view()
         else:
             self.SetStatusText(
                 _("Error: monitor is not active: %s") % signal_name
