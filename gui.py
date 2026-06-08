@@ -2669,11 +2669,64 @@ class Gui(wx.Frame):
 
         self.aui_manager = CascadingAuiManager(self.top_panel)
 
+        # ── Modern theme ──────────────────────────────────────────────────────
+        # Dark navy captions + clean light panels.  The key differences from the
+        # old style: no gradient, no raised 3D pane border, tall flat caption.
+        _PANEL_BG = wx.Colour(240, 242, 247)  # clean off-white background
+        _CAPTION_BG = wx.Colour(30, 45, 80)  # dark navy caption bar
+        _CAPTION_FG = wx.Colour(200, 215, 240)  # pale-blue caption text
+        _SASH = wx.Colour(180, 186, 202)  # slim separator
+        _CONSOLE_BG = wx.Colour(252, 252, 255)
+        _CONSOLE_FG = wx.Colour(30, 35, 50)
+
+        art = self.aui_manager.GetArtProvider()
+        art.SetColour(agw_aui.AUI_DOCKART_BACKGROUND_COLOUR, _PANEL_BG)
+        art.SetColour(agw_aui.AUI_DOCKART_SASH_COLOUR, _SASH)
+        art.SetColour(agw_aui.AUI_DOCKART_ACTIVE_CAPTION_COLOUR, _CAPTION_BG)
+        art.SetColour(
+            agw_aui.AUI_DOCKART_ACTIVE_CAPTION_GRADIENT_COLOUR, _CAPTION_BG
+        )
+        art.SetColour(agw_aui.AUI_DOCKART_INACTIVE_CAPTION_COLOUR, _CAPTION_BG)
+        art.SetColour(
+            agw_aui.AUI_DOCKART_INACTIVE_CAPTION_GRADIENT_COLOUR, _CAPTION_BG
+        )
+        art.SetColour(
+            agw_aui.AUI_DOCKART_ACTIVE_CAPTION_TEXT_COLOUR, _CAPTION_FG
+        )
+        art.SetColour(
+            agw_aui.AUI_DOCKART_INACTIVE_CAPTION_TEXT_COLOUR, _CAPTION_FG
+        )
+        art.SetColour(agw_aui.AUI_DOCKART_BORDER_COLOUR, _SASH)
+        art.SetColour(agw_aui.AUI_DOCKART_GRIPPER_COLOUR, _SASH)
+        art.SetMetric(
+            agw_aui.AUI_DOCKART_GRADIENT_TYPE, agw_aui.AUI_GRADIENT_NONE
+        )
+        art.SetMetric(agw_aui.AUI_DOCKART_PANE_BORDER_SIZE, 0)
+        art.SetMetric(agw_aui.AUI_DOCKART_SASH_SIZE, 5)
+        art.SetMetric(agw_aui.AUI_DOCKART_CAPTION_SIZE, 24)
+        _caption_font = wx.Font(
+            9,
+            wx.FONTFAMILY_DEFAULT,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_BOLD,
+            faceName="CMU Serif",
+        )
+        art.SetFont(agw_aui.AUI_DOCKART_CAPTION_FONT, _caption_font)
+
+        self.SetBackgroundColour(_PANEL_BG)
+        self.outer_splitter.SetBackgroundColour(_SASH)
+        self.top_panel.SetBackgroundColour(_PANEL_BG)
+        self.canvas_panel.SetBackgroundColour(_PANEL_BG)
+        self.left_pane.SetBackgroundColour(_PANEL_BG)
+        self.splitter.SetBackgroundColour(_SASH)
+
         # FIX: Create the sub-pane window panels BEFORE using them as parents
         sim_pane = wx.Panel(self.top_panel)
         switch_pane = wx.Panel(self.top_panel)
         monitor_pane = wx.Panel(self.top_panel)
         console_pane = wx.Panel(self.top_panel)
+        for _p in (sim_pane, switch_pane, monitor_pane, console_pane):
+            _p.SetBackgroundColour(_PANEL_BG)
 
         # ── Widgets (Now attached to their correct, existing parents) ─────────
         self.cycles_label = wx.StaticText(sim_pane, wx.ID_ANY, _("Cycles"))
@@ -2717,6 +2770,7 @@ class Gui(wx.Frame):
         )
         self.switch_list.InsertColumn(0, _("Switch"))
         self.switch_list.InsertColumn(1, _("Value"), wx.LIST_FORMAT_CENTER)
+        self.switch_list.SetBackgroundColour(_CONSOLE_BG)
         self.switch_list.Bind(wx.EVT_SIZE, self._on_switch_list_size)
         self.switch_list.Bind(
             wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag
@@ -2730,6 +2784,7 @@ class Gui(wx.Frame):
         self.monitors_list = wx.ListBox(
             monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
+        self.monitors_list.SetBackgroundColour(_CONSOLE_BG)
         self.add_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "+")
         self.remove_monitor_btn = wx.Button(monitor_pane, wx.ID_ANY, "-")
         self.monitor_up_btn = wx.Button(monitor_pane, wx.ID_ANY, "↑")
@@ -2748,6 +2803,8 @@ class Gui(wx.Frame):
             wx.FONTWEIGHT_NORMAL,
         )
         self.console.SetFont(console_font)
+        self.console.SetBackgroundColour(_CONSOLE_BG)
+        self.console.SetForegroundColour(_CONSOLE_FG)
 
         # Tooltips
         initial_cycles = self.spin.GetValue()
@@ -3767,7 +3824,9 @@ class Gui(wx.Frame):
             self.log(_("Added monitor: %s") % clean_signal_name)
             self._auto_reset_view()
         elif monitor_error == self.monitors.MONITOR_PRESENT:
-            self.SetStatusText(_("Monitor already active: %s") % clean_signal_name)
+            self.SetStatusText(
+                _("Monitor already active: %s") % clean_signal_name
+            )
         else:
             self.SetStatusText(
                 _("Error: could not add monitor %s") % clean_signal_name
@@ -4043,11 +4102,21 @@ class Gui(wx.Frame):
         )
 
         # Create and display a scrollable information dialogue box
-        dlg = wx.Dialog(self, title=_("GUI Usage Guide"), size=(520, 440),
-                        style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        dlg = wx.Dialog(
+            self,
+            title=_("GUI Usage Guide"),
+            size=(520, 440),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
         sizer = wx.BoxSizer(wx.VERTICAL)
-        txt = wx.TextCtrl(dlg, value=help_text,
-                          style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.BORDER_NONE)
+        txt = wx.TextCtrl(
+            dlg,
+            value=help_text,
+            style=wx.TE_MULTILINE
+            | wx.TE_READONLY
+            | wx.TE_WORDWRAP
+            | wx.BORDER_NONE,
+        )
         txt.SetBackgroundColour(dlg.GetBackgroundColour())
         sizer.Add(txt, 1, wx.EXPAND | wx.ALL, 10)
         btn = wx.Button(dlg, wx.ID_OK)
