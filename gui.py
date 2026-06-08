@@ -21,7 +21,7 @@ import wx.stc
 from OpenGL import GL, GLU, GLUT
 
 from devices import Devices
-from flatbutton import FlatButton, _GREEN, _GREEN_TEXT
+from flatbutton import FlatButton
 from monitors import Monitors
 from names import Names
 from network import Network
@@ -1521,9 +1521,13 @@ class LogicViewerDialog(wx.Dialog):
         bar = wx.Panel(self)
         bar.SetBackgroundColour(wx.Colour(236, 238, 241))
         bar_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        btn_out = FlatButton(bar, "−", variant="ghost", pill=True, size=(34, 26))
-        btn_in = FlatButton(bar, "+", variant="ghost", pill=True, size=(34, 26))
-        btn_reset = FlatButton(bar, _("Fit"), variant="ghost", size=(-1, 26))
+        btn_out = FlatButton(
+            bar, "−", variant="filled", pill=True, size=(34, 26)
+        )
+        btn_in = FlatButton(
+            bar, "+", variant="filled", pill=True, size=(34, 26)
+        )
+        btn_reset = FlatButton(bar, _("Fit"), variant="filled", size=(-1, 26))
         btn_out.SetToolTip(_("Zoom out"))
         btn_in.SetToolTip(_("Zoom in"))
         btn_reset.SetToolTip(_("Reset zoom to fit"))
@@ -2632,7 +2636,11 @@ class Gui(wx.Frame):
         )
 
         self._view_3d_btn = FlatButton(
-            self.canvas_panel, "3D", toggle=True, variant="ghost", size=(42, 26)
+            self.canvas_panel,
+            "3D",
+            toggle=True,
+            variant="filled",
+            size=(42, 26),
         )
         self._view_3d_btn.SetToolTip(_("Switch to 3D signal view"))
         self._view_3d_btn.Bind(wx.EVT_TOGGLEBUTTON, self._on_toggle_3d)
@@ -2644,7 +2652,10 @@ class Gui(wx.Frame):
         )
 
         self._logic_viewer_btn = FlatButton(
-            self.canvas_panel, _("Logic Viewer"), variant="outline", size=(-1, 26)
+            self.canvas_panel,
+            _("Logic Viewer"),
+            variant="filled",
+            size=(-1, 26),
         )
         self._logic_viewer_btn.SetToolTip(_("Show gate-level circuit diagram"))
         self._logic_viewer_btn.Bind(wx.EVT_BUTTON, self._on_logic_viewer)
@@ -2736,21 +2747,24 @@ class Gui(wx.Frame):
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(110, -1)
         )
         self.run_button = FlatButton(
-            sim_pane, "▶", variant="filled",
-            accent=_GREEN, fg=_GREEN_TEXT, pill=True, size=(36, 28)
+            sim_pane,
+            "▶",
+            variant="filled",
+            pill=True,
+            size=(36, 28),
         )
         self.continue_button = FlatButton(
-            sim_pane, "+10", variant="outline", size=(50, 28)
+            sim_pane, "+10", variant="filled", size=(50, 28)
         )
         self.last_cycles_check = wx.CheckBox(sim_pane, wx.ID_ANY, _("Last"))
         self.last_cycles_spin = wx.SpinCtrl(
             sim_pane, wx.ID_ANY, "10", min=1, max=1000, size=(70, -1)
         )
         self.reset_button = FlatButton(
-            sim_pane, "↺", variant="ghost", pill=True, size=(36, 28)
+            sim_pane, "↺", variant="filled", pill=True, size=(36, 28)
         )
         self.skip_button = FlatButton(
-            sim_pane, _("Skip"), variant="ghost", size=(52, 28)
+            sim_pane, _("Skip"), variant="filled", size=(52, 28)
         )
         # Animation speed selector for the progressive trace drawing.
         self._anim_speeds = [
@@ -2783,9 +2797,11 @@ class Gui(wx.Frame):
             wx.EVT_LIST_COL_END_DRAG, self._on_switch_col_drag
         )
         self.switch_on = FlatButton(
-            switch_pane, _("ON"), variant="filled", accent=_GREEN, fg=_GREEN_TEXT
+            switch_pane,
+            _("ON"),
+            variant="filled",
         )
-        self.switch_off = FlatButton(switch_pane, _("OFF"), variant="outline")
+        self.switch_off = FlatButton(switch_pane, _("OFF"), variant="filled")
 
         self.monitors_label = wx.StaticText(
             monitor_pane, wx.ID_ANY, _("Monitors:")
@@ -2794,10 +2810,18 @@ class Gui(wx.Frame):
             monitor_pane, wx.ID_ANY, choices=[], style=wx.LB_SINGLE
         )
         self.monitors_list.SetBackgroundColour(_CONSOLE_BG)
-        self.add_monitor_btn = FlatButton(monitor_pane, "+", variant="outline", pill=True)
-        self.remove_monitor_btn = FlatButton(monitor_pane, "-", variant="ghost", pill=True)
-        self.monitor_up_btn = FlatButton(monitor_pane, "↑", variant="ghost", pill=True)
-        self.monitor_down_btn = FlatButton(monitor_pane, "↓", variant="ghost", pill=True)
+        self.add_monitor_btn = FlatButton(
+            monitor_pane, "+", variant="filled", pill=True
+        )
+        self.remove_monitor_btn = FlatButton(
+            monitor_pane, "-", variant="filled", pill=True
+        )
+        self.monitor_up_btn = FlatButton(
+            monitor_pane, "↑", variant="filled", pill=True
+        )
+        self.monitor_down_btn = FlatButton(
+            monitor_pane, "↓", variant="filled", pill=True
+        )
 
         self.console = wx.TextCtrl(
             console_pane,
@@ -2989,7 +3013,7 @@ class Gui(wx.Frame):
         sim_info = (
             _resizable_pane(0, _("Simulation"))
             .Name("Simulation")
-            .MinSize((110, 155))
+            .MinSize((140, 155))
             .BestSize((150, 195))
         )
         switch_info = (
@@ -3125,7 +3149,9 @@ class Gui(wx.Frame):
 
         self._viewer_title.SetMinSize((50, -1))
 
-        save_btn = FlatButton(self.viewer_panel, _("Save"), variant="filled", size=(58, 28))
+        save_btn = FlatButton(
+            self.viewer_panel, _("Save"), variant="filled", size=(58, 28)
+        )
         save_btn.SetToolTip(_("Save changes to file"))
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
 
@@ -3136,7 +3162,7 @@ class Gui(wx.Frame):
         implement_btn.Bind(wx.EVT_BUTTON, self._on_implement_viewer)
 
         close_btn = FlatButton(
-            self.viewer_panel, "✕", variant="ghost", pill=True, size=(28, 28)
+            self.viewer_panel, "✕", variant="filled", pill=True, size=(28, 28)
         )
         close_btn.SetToolTip(_("Close file viewer"))
         close_btn.Bind(wx.EVT_BUTTON, self._on_close_viewer)
