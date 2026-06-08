@@ -1068,7 +1068,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                 GL.glVertex3f(x_lo, plane_y, z1)
                 GL.glEnd()
 
-        # Cycle numbers along the X axis – at both the front and back edges
+        # Cycle numbers along the X axis – front/back edges and between lanes
         GL.glColor3f(0.65, 0.70, 0.80)
         label_y = floor_y + 3
         raw_step = max(1, int(30 / CYCLE_W))
@@ -1076,10 +1076,15 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
             (n for n in [1, 2, 5, 10, 20, 50, 100, 250] if n >= raw_step),
             raw_step,
         )
+        # Collect all Z positions where labels should appear.
+        label_z_positions = [z_hi + 14, z_lo - 14]
+        for k in range(num_signals - 1):
+            z_mid = (k + 1 - num_signals / 2.0) * LANE_D
+            label_z_positions.append(z_mid)
         for i in range(0, max_cycles + 1, step):
             x = x_lo + i * CYCLE_W
-            self.render_text(str(i), x - 3, label_y, z_hi + 14)  # front edge
-            self.render_text(str(i), x - 3, label_y, z_lo - 14)  # back edge
+            for z in label_z_positions:
+                self.render_text(str(i), x - 3, label_y, z)
 
         # HIGH and LOW level labels — one pair at the right end of each lane
         for k, (key, _sig) in enumerate(signal_items):
