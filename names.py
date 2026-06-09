@@ -94,6 +94,6 @@ class Names:
 
         return name.strip("_").split("__")[0]
 
-    def get_pretty_name(self, name_id: int) -> str:
+    def get_pretty_name(self, name_id: int) -> str|None:
         name = self.get_name_string(name_id)
         return self.prettify_name(name)
