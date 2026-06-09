@@ -1439,6 +1439,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         GL.glLoadIdentity()
         GL.glDisable(GL.GL_LIGHTING)
         GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glDisable(GL.GL_CULL_FACE)
 
         # Filled disc (button background).
         GL.glColor3f(0.13, 0.65, 0.32)
@@ -1474,6 +1475,7 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         _gl_draw_text_centered(label, cx, cy + r + 22)
 
         # Restore the perspective projection and 3D render state.
+        GL.glEnable(GL.GL_CULL_FACE)
         GL.glEnable(GL.GL_DEPTH_TEST)
         GL.glEnable(GL.GL_LIGHTING)
         GL.glMatrixMode(GL.GL_PROJECTION)
