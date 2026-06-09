@@ -36,6 +36,63 @@ _ = wx.GetTranslation
 ID_TOGGLE_VIEWER = wx.NewIdRef()
 
 
+def _gl_draw_text_centered(text, cx, y, w_scale=1.0, h_scale=1.0):
+    """Render Unicode text centered at cx, top edge at y, as a GL texture.
+
+    GLUT bitmap fonts are Latin-1 only; this handles any Unicode string.
+    w_scale / h_scale convert bitmap pixels → GL units (pass 1/zoom for the
+    2D world-coordinate system; pass 1.0 for pixel-space overlays).
+    Alpha blending is used so there is no black box behind the text.
+    """
+    if not text:
+        return
+    font = wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
+                   wx.FONTWEIGHT_NORMAL)
+    mdc = wx.MemoryDC()
+    mdc.SetFont(font)
+    tw, th = mdc.GetTextExtent(text)
+    tw, th = max(int(tw), 1), max(int(th), 1)
+    bmp = wx.Bitmap(tw, th)
+    mdc.SelectObject(bmp)
+    mdc.SetBackground(wx.Brush(wx.Colour(0, 0, 0)))
+    mdc.Clear()
+    mdc.SetTextForeground(wx.Colour(255, 255, 255))  # white; colour via RGBA
+    mdc.DrawText(text, 0, 0)
+    mdc.SelectObject(wx.NullBitmap)
+
+    src = bytes(bmp.ConvertToImage().GetData())  # RGB, tw*th*3 bytes
+
+    # Build RGBA: pixel brightness → alpha so the black background disappears.
+    rgba = bytearray(tw * th * 4)
+    r0, g0, b0 = 210, 230, 255  # pale blue text colour
+    for i in range(tw * th):
+        a = max(src[i * 3], src[i * 3 + 1], src[i * 3 + 2])
+        rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3] = r0, g0, b0, a
+
+    tex = GL.glGenTextures(1)
+    GL.glEnable(GL.GL_TEXTURE_2D)
+    GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+    GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, tw, th, 0,
+                    GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, bytes(rgba))
+
+    x0 = cx - (tw * w_scale) / 2
+    qw, qh = tw * w_scale, th * h_scale
+    GL.glEnable(GL.GL_BLEND)
+    GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+    GL.glColor4f(1.0, 1.0, 1.0, 1.0)
+    GL.glBegin(GL.GL_QUADS)
+    GL.glTexCoord2f(0, 0); GL.glVertex2f(x0,      y)
+    GL.glTexCoord2f(1, 0); GL.glVertex2f(x0 + qw, y)
+    GL.glTexCoord2f(1, 1); GL.glVertex2f(x0 + qw, y + qh)
+    GL.glTexCoord2f(0, 1); GL.glVertex2f(x0,      y + qh)
+    GL.glEnd()
+    GL.glDisable(GL.GL_BLEND)
+    GL.glDisable(GL.GL_TEXTURE_2D)
+    GL.glDeleteTextures([tex])
+
+
 class MyGLCanvas(wxcanvas.GLCanvas):
     """Handle all drawing operations."""
 
@@ -415,11 +472,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(tx + t, cy)
         GL.glEnd()
 
-        # Prompt text centred below the button (bitmap font: fixed pixels).
+        # Prompt text centred below the button — wx-bitmap texture for Unicode.
         label = _("To simulate press play")
-        text_x = cx - (len(label) * 6.0) / 2 / zoom
-        text_y = cy + r + 22 / zoom
-        self.render_text(label, text_x, text_y)
+        _gl_draw_text_centered(label, cx, cy + r + 22 / zoom, 1.0 / zoom, 1.0 / zoom)
 
         # Record screen-pixel hit region (button is centred on the canvas).
         self._play_button_center = (canvas_width / 2, canvas_height / 2)
@@ -1414,12 +1469,9 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
         GL.glVertex2f(tx + t, cy)
         GL.glEnd()
 
-        # Prompt text centred below the button (bitmap font: fixed pixels).
+        # Prompt text centred below the button — wx-bitmap texture for Unicode.
         label = _("To simulate press play")
-        text_x = cx - (len(label) * 6.0) / 2
-        text_y = cy + r + 22
-        GL.glColor3f(0.85, 0.92, 1.0)
-        self.render_text(label, text_x, text_y, 0)
+        _gl_draw_text_centered(label, cx, cy + r + 22)
 
         # Restore the perspective projection and 3D render state.
         GL.glEnable(GL.GL_DEPTH_TEST)
@@ -3509,6 +3561,14 @@ class Gui(wx.Frame):
         way to switch language at runtime is to recreate the frame with the
         underlying simulator objects (which keep all signal history) intact.
         """
+        # Capture state from the old frame before anything changes.
+        lang_idx = self._lang_choice.GetSelection()
+        speed_idx = self.speed_choice.GetSelection()
+        pos = self.GetPosition()
+        size = self.GetSize()
+        was_maximized = self.IsMaximized()
+        viewer_was_visible = self._viewer_visible
+
         locale_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "locale"
         )
@@ -3520,11 +3580,6 @@ class Gui(wx.Frame):
         app = wx.GetApp()
         app._app_locale = new_locale
 
-        pos = self.GetPosition()
-        size = self.GetSize()
-        was_maximized = self.IsMaximized()
-        viewer_was_visible = self._viewer_visible
-
         new_gui = Gui(
             self._title,
             self._viewer_path,
@@ -3535,6 +3590,12 @@ class Gui(wx.Frame):
         )
         new_gui.cycles_completed = self.cycles_completed
         new_gui._full_history = self._full_history
+
+        # Explicitly restore the language and speed selectors so the display
+        # matches the new locale regardless of how wx.GetLocale() behaves.
+        new_gui._lang_choice.SetSelection(lang_idx)
+        new_gui.speed_choice.SetSelection(speed_idx)
+
         if was_maximized:
             new_gui.Maximize(True)
         else:

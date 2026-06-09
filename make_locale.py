@@ -474,7 +474,7 @@ TRANSLATIONS_EL = {
     "Low": "Χαμηλό",
     "HIGH": "ΥΨΗΛΟ",
     "LOW": "ΧΑΜΗΛΟ",
-    "To simulate press play": "Για προσομοίωση πατήστε play",
+    "To simulate press play": "Για προσομοίωση πατήστε αναπαραγωγή",
 
     # ── Monitor list suffix ───────────────────────────────────────────────────
     " (on)": " (ενεργό)",
