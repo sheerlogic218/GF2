@@ -3581,13 +3581,29 @@ class Gui(wx.Frame):
         way to switch language at runtime is to recreate the frame with the
         underlying simulator objects (which keep all signal history) intact.
         """
-        # Capture state from the old frame before anything changes.
+        # Guard against re-entry: after Show(new_gui) the old frame is still
+        # briefly alive, so the user could click the language dropdown again
+        # before CallAfter(Destroy) fires, scheduling a second Destroy() on an
+        # already-destroyed frame and crashing.
+        if getattr(self, '_applying_language', False):
+            return
+        self._applying_language = True
+
+        # Capture all state from the old frame up-front before anything changes.
         lang_idx = self._lang_choice.GetSelection()
         speed_idx = self.speed_choice.GetSelection()
         pos = self.GetPosition()
         size = self.GetSize()
         was_maximized = self.IsMaximized()
         viewer_was_visible = self._viewer_visible
+        was_3d = self._is_3d
+
+        # Stop both canvas animation timers immediately. Both canvases run a
+        # 30 ms wx.Timer; if left running it will fire on the old (soon-to-be-
+        # destroyed) canvas after this function returns, triggering a render /
+        # GL SetCurrent on a dead context and crashing.
+        self.canvas.skip_animation()
+        self.canvas3d.skip_animation()
 
         app = wx.GetApp()
         if hasattr(app, "_app_locale"):
@@ -3627,12 +3643,16 @@ class Gui(wx.Frame):
             new_gui.SetPosition(pos)
         new_gui.Show(True)
 
+        # Hide this frame immediately so the user cannot interact with it
+        # (e.g. trigger another language change) while it waits for Destroy.
+        self.Hide()
+
         # Preserve the file viewer's open/closed state across the rebuild.
         if viewer_was_visible:
             new_gui._show_viewer()
 
         # Preserve the active 2D/3D view across the rebuild.
-        if self._is_3d:
+        if was_3d:
             new_gui._view_3d_btn.SetValue(True)
             synth = wx.CommandEvent(wx.wxEVT_TOGGLEBUTTON)
             synth.SetInt(1)
