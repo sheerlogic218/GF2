@@ -42,8 +42,9 @@ def _gl_draw_text_centered(text, cx, y, w_scale=1.0, h_scale=1.0):
     """
     if not text:
         return
-    font = wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
-                   wx.FONTWEIGHT_NORMAL)
+    font = wx.Font(
+        11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL
+    )
     mdc = wx.MemoryDC()
     mdc.SetFont(font)
     tw, th = mdc.GetTextExtent(text)
@@ -63,15 +64,33 @@ def _gl_draw_text_centered(text, cx, y, w_scale=1.0, h_scale=1.0):
     r0, g0, b0 = 210, 230, 255  # pale blue text colour
     for i in range(tw * th):
         a = max(src[i * 3], src[i * 3 + 1], src[i * 3 + 2])
-        rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3] = r0, g0, b0, a
+        rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3] = (
+            r0,
+            g0,
+            b0,
+            a,
+        )
 
     tex = GL.glGenTextures(1)
     GL.glEnable(GL.GL_TEXTURE_2D)
     GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
-    GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, tw, th, 0,
-                    GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, bytes(rgba))
+    GL.glTexParameteri(
+        GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR
+    )
+    GL.glTexParameteri(
+        GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR
+    )
+    GL.glTexImage2D(
+        GL.GL_TEXTURE_2D,
+        0,
+        GL.GL_RGBA,
+        tw,
+        th,
+        0,
+        GL.GL_RGBA,
+        GL.GL_UNSIGNED_BYTE,
+        bytes(rgba),
+    )
 
     x0 = cx - (tw * w_scale) / 2
     qw, qh = tw * w_scale, th * h_scale
@@ -79,10 +98,14 @@ def _gl_draw_text_centered(text, cx, y, w_scale=1.0, h_scale=1.0):
     GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
     GL.glColor4f(1.0, 1.0, 1.0, 1.0)
     GL.glBegin(GL.GL_QUADS)
-    GL.glTexCoord2f(0, 0); GL.glVertex2f(x0,      y)
-    GL.glTexCoord2f(1, 0); GL.glVertex2f(x0 + qw, y)
-    GL.glTexCoord2f(1, 1); GL.glVertex2f(x0 + qw, y + qh)
-    GL.glTexCoord2f(0, 1); GL.glVertex2f(x0,      y + qh)
+    GL.glTexCoord2f(0, 0)
+    GL.glVertex2f(x0, y)
+    GL.glTexCoord2f(1, 0)
+    GL.glVertex2f(x0 + qw, y)
+    GL.glTexCoord2f(1, 1)
+    GL.glVertex2f(x0 + qw, y + qh)
+    GL.glTexCoord2f(0, 1)
+    GL.glVertex2f(x0, y + qh)
     GL.glEnd()
     GL.glDisable(GL.GL_BLEND)
     GL.glDisable(GL.GL_TEXTURE_2D)
@@ -470,7 +493,9 @@ class MyGLCanvas(wxcanvas.GLCanvas):
 
         # Prompt text centred below the button — wx-bitmap texture for Unicode.
         label = _("To simulate press play")
-        _gl_draw_text_centered(label, cx, cy + r + 22 / zoom, 1.0 / zoom, 1.0 / zoom)
+        _gl_draw_text_centered(
+            label, cx, cy + r + 22 / zoom, 1.0 / zoom, 1.0 / zoom
+        )
 
         # Record screen-pixel hit region (button is centred on the canvas).
         self._play_button_center = (canvas_width / 2, canvas_height / 2)
@@ -2665,30 +2690,20 @@ class Gui(wx.Frame):
         )
 
         # Language selector – switch the UI between English, French and Greek.
-
-
-        # self._languages = [
-        #     ("English", wx.LANGUAGE_ENGLISH),
-        #     ("Français", wx.LANGUAGE_FRENCH),
-        #     ("Ελληνικά", wx.LANGUAGE_GREEK),
-        # ]
-
         self._languages = {
-            "English": (wx.LANGUAGE_ENGLISH,1),
-            "Français": (wx.LANGUAGE_FRENCH,2),
-            "Ελληνικά": (wx.LANGUAGE_GREEK,3),
+            "English": wx.LANGUAGE_ENGLISH,
+            "Français": wx.LANGUAGE_FRENCH,
+            "Ελληνικά": wx.LANGUAGE_GREEK,
         }
+        self._inv_languages = {v: k for k, v in self._languages.items()}
 
         self._lang_choice = FlatChoice(
             self.canvas_panel,
-            # choices=[name for name, _lang in self._languages],
             choices=[name for name in self._languages.keys()],
             size=(110, 26),
         )
         self._lang_choice.SetToolTip(_("Change interface language"))
-        self._lang_choice.SetSelection(self._current_language_index())
-        # self._lang_choice.SetStringSelection()
-        #TODO
+        self._lang_choice.SetStringSelection(self._current_language())
         self._lang_choice.Bind(wx.EVT_CHOICE, self._on_language_change)
         x_zoom_row.Add(
             self._lang_choice,
@@ -3547,33 +3562,16 @@ class Gui(wx.Frame):
 
     # ── Language switching ───────────────────────────────────────────────────
 
-    def _current_language_index(self):
+    def _current_language(self):
         """Return the index in self._languages matching the active locale."""
         loc = wx.GetLocale()
-        print("loc",loc)
-        if loc:
-            print("loc truthy")
-        else:
-            print("loc falsy")
         current = loc.GetLanguage() if loc else wx.LANGUAGE_DEFAULT
-        print("current:",current)
-
-        for lang, index in self._languages.values():
-            if lang == current:
-                return index
-        print("ashiagdjaghsdiluhas;udh;asdf")
-        return 0
-
-        # for i, (_name, lang) in enumerate(self._languages):
-        #     if lang == current:
-        #         return i
-        # print("ashiagdjaghsdiluhas;udh;asdf")
-        # return 0  # default to English
+        return self._inv_languages.get(current, "English")
 
     def _on_language_change(self, event):
         """Switch the interface language to the user's selection."""
         language = self._lang_choice.GetStringSelection()
-        wx_lang = self._languages[language][0]
+        wx_lang = self._languages[language]
         self._apply_language(wx_lang)
 
     def _apply_language(self, wx_lang):
@@ -3591,12 +3589,16 @@ class Gui(wx.Frame):
         was_maximized = self.IsMaximized()
         viewer_was_visible = self._viewer_visible
 
+        app = wx.GetApp()
+        if hasattr(app, "_app_locale"):
+            del app._app_locale
+
         locale_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "locale"
         )
         wx.Locale.AddCatalogLookupPathPrefix(locale_dir)
-        new_locale = wx.Locale()
-        new_locale.Init(wx_lang, wx.LOCALE_DONT_LOAD_DEFAULT)
+
+        new_locale = wx.Locale(wx_lang, wx.LOCALE_DONT_LOAD_DEFAULT)
         new_locale.AddCatalog("logsim")
         # Keep a reference on the app so the locale is not garbage-collected.
         app = wx.GetApp()
