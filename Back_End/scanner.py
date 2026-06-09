@@ -9,9 +9,8 @@ Scanner - reads definition file and translates characters into symbols.
 Symbol - encapsulates a symbol and stores its properties.
 """
 
-import uuid
 
-from names import Names
+from .names import Names
 
 
 class Symbol:
@@ -180,8 +179,6 @@ class Scanner:
                 symbol.id = self.names.query(text)
             else:
                 symbol.type = Symbol.NAME
-                # [symbol.id] = self.names.lookup([text])
-                # symbol.id = uuid.uuid4()
             return symbol, True
 
         # Numbers

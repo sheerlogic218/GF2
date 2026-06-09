@@ -12,19 +12,13 @@ Graphical user interface: logsim.py <file path>
 """
 
 import getopt
-import os
 import sys
-
+import os
 import wx
 
-from devices import Devices
-from gui import Gui
-from monitors import Monitors
-from names import Names
-from network import Network
-from parse import Parser
-from scanner import Scanner
-from userint import UserInterface
+from Front_End import *
+from Back_End import *
+
 
 
 def main(arg_list):
@@ -110,7 +104,7 @@ def _setup_locale(app: wx.App) -> wx.Locale:
         LANG=fr_FR python logsim.py <file>          # Linux/macOS
         $env:LANG="fr_FR"; python logsim.py <file>  # PowerShell
     """
-    locale_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale")
+    locale_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Front_End/locale")
     wx.Locale.AddCatalogLookupPathPrefix(locale_dir)
 
     lang_str = os.environ.get("LANG", os.environ.get("LANGUAGE", "")).lower()

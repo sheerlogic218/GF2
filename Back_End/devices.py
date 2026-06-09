@@ -12,7 +12,7 @@ Devices - makes and stores all the devices in the logic network.
 import random
 from uuid import UUID
 
-from names import Names
+from .names import Names
 
 
 class Device:

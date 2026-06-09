@@ -20,13 +20,9 @@ import wx.lib.agw.aui as agw_aui
 import wx.stc
 from OpenGL import GL, GLU, GLUT
 
-from devices import Devices
-from flatbutton import FlatButton, FlatChoice
-from monitors import Monitors
-from names import Names
-from network import Network
-from parse import Parser
-from scanner import Scanner
+from .flatbutton import FlatButton, FlatChoice
+
+from Back_End import *
 
 # Alias for gettext-style translation lookup.
 # wx.Locale + a .mo catalog must be initialised before GUI widgets are created.
@@ -2669,18 +2665,30 @@ class Gui(wx.Frame):
         )
 
         # Language selector – switch the UI between English, French and Greek.
-        self._languages = [
-            ("English", wx.LANGUAGE_ENGLISH),
-            ("Français", wx.LANGUAGE_FRENCH),
-            ("Ελληνικά", wx.LANGUAGE_GREEK),
-        ]
+
+
+        # self._languages = [
+        #     ("English", wx.LANGUAGE_ENGLISH),
+        #     ("Français", wx.LANGUAGE_FRENCH),
+        #     ("Ελληνικά", wx.LANGUAGE_GREEK),
+        # ]
+
+        self._languages = {
+            "English": (wx.LANGUAGE_ENGLISH,1),
+            "Français": (wx.LANGUAGE_FRENCH,2),
+            "Ελληνικά": (wx.LANGUAGE_GREEK,3),
+        }
+
         self._lang_choice = FlatChoice(
             self.canvas_panel,
-            choices=[name for name, _lang in self._languages],
+            # choices=[name for name, _lang in self._languages],
+            choices=[name for name in self._languages.keys()],
             size=(110, 26),
         )
         self._lang_choice.SetToolTip(_("Change interface language"))
         self._lang_choice.SetSelection(self._current_language_index())
+        # self._lang_choice.SetStringSelection()
+        #TODO
         self._lang_choice.Bind(wx.EVT_CHOICE, self._on_language_change)
         x_zoom_row.Add(
             self._lang_choice,
@@ -3542,18 +3550,30 @@ class Gui(wx.Frame):
     def _current_language_index(self):
         """Return the index in self._languages matching the active locale."""
         loc = wx.GetLocale()
+        print("loc",loc)
+        if loc:
+            print("loc truthy")
+        else:
+            print("loc falsy")
         current = loc.GetLanguage() if loc else wx.LANGUAGE_DEFAULT
-        for i, (_name, lang) in enumerate(self._languages):
+        print("current:",current)
+
+        for lang, index in self._languages.values():
             if lang == current:
-                return i
-        return 0  # default to English
+                return index
+        print("ashiagdjaghsdiluhas;udh;asdf")
+        return 0
+
+        # for i, (_name, lang) in enumerate(self._languages):
+        #     if lang == current:
+        #         return i
+        # print("ashiagdjaghsdiluhas;udh;asdf")
+        # return 0  # default to English
 
     def _on_language_change(self, event):
         """Switch the interface language to the user's selection."""
-        idx = self._lang_choice.GetSelection()
-        if idx < 0:
-            return
-        _name, wx_lang = self._languages[idx]
+        language = self._lang_choice.GetStringSelection()
+        wx_lang = self._languages[language][0]
         self._apply_language(wx_lang)
 
     def _apply_language(self, wx_lang):
