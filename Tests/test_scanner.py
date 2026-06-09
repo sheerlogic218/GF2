@@ -3,8 +3,8 @@ import tempfile
 
 import pytest
 
-from names import Names
-from scanner import Scanner, Symbol
+from Back_End.names import Names
+from Back_End.scanner import Scanner, Symbol
 
 
 def make_scanner(text):

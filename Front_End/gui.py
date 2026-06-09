@@ -20,13 +20,9 @@ import wx.lib.agw.aui as agw_aui
 import wx.stc
 from OpenGL import GL, GLU, GLUT
 
-from devices import Devices
-from flatbutton import FlatButton, FlatChoice
-from monitors import Monitors
-from names import Names
-from network import Network
-from parse import Parser
-from scanner import Scanner
+from .flatbutton import FlatButton, FlatChoice
+
+from Back_End import *
 
 # Alias for gettext-style translation lookup.
 # wx.Locale + a .mo catalog must be initialised before GUI widgets are created.

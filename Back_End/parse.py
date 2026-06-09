@@ -13,7 +13,7 @@ Parser - parses the definition file and builds the logic network.
 
 import uuid
 
-from scanner import Symbol
+from .scanner import Symbol
 
 
 class Parser:

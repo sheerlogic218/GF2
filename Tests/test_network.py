@@ -2,9 +2,9 @@
 
 import pytest
 
-from devices import Devices
-from names import Names
-from network import Network
+from Back_End.devices import Devices
+from Back_End.names import Names
+from Back_End.network import Network
 
 
 @pytest.fixture

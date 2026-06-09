@@ -2,8 +2,8 @@
 
 import pytest
 
-from devices import Devices
-from names import Names
+from Back_End.devices import Devices
+from Back_End.names import Names
 
 
 @pytest.fixture
