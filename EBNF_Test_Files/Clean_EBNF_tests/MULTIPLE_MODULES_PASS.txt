@@ -14,11 +14,14 @@ module half_adder : C -> ;
 
 end ;
  
-
+module instantiation : -> ;
 switch X = 1 ;
 wire out ;
 
 out = !X ;
 half_adder barry(X->);
-monitor out ;
+monitor out ;
+end;
+
+instantiation();
  
