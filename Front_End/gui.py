@@ -2701,6 +2701,7 @@ class Gui(wx.Frame):
             self.canvas_panel,
             choices=[name for name in self._languages.keys()],
             size=(110, 26),
+            dropup=True,
         )
         self._lang_choice.SetToolTip(_("Change interface language"))
         self._lang_choice.SetStringSelection(self._current_language())

@@ -314,6 +314,7 @@ class FlatChoice(wx.Control):
         radius=8,
         font=None,
         size=wx.DefaultSize,
+        dropup=False,
     ):
         super().__init__(parent, id, size=size, style=wx.BORDER_NONE)
         self._choices = list(choices or [])
@@ -325,6 +326,7 @@ class FlatChoice(wx.Control):
         self._radius = radius
         self._hover = False
         self._pressed = False
+        self._dropup = dropup
 
         if font is None:
             font = parent.GetFont().Bold()
@@ -415,7 +417,10 @@ class FlatChoice(wx.Control):
             and self.GetClientRect().Contains(e.GetPosition())
         ):
             popup = _FlatChoicePopup(self)
-            pos = self.ClientToScreen((0, self.GetSize().height))
+            if self._dropup:
+                pos = self.ClientToScreen((0, -popup.GetSize().height))
+            else:
+                pos = self.ClientToScreen((0, self.GetSize().height))
             popup.SetPosition(pos)
             popup.Popup()
 
@@ -442,7 +447,7 @@ class FlatChoice(wx.Control):
         gc.SetFont(self.GetFont())
         gc.SetTextForeground(text_col)
 
-        arrow = "▾"
+        arrow = "▴" if self._dropup else "▾"
         aw, _ = gc.GetTextExtent(arrow)
         arrow_x = w - aw - 8
         _, ah = gc.GetTextExtent(arrow)
