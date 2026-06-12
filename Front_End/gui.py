@@ -12,6 +12,7 @@ import datetime
 import math
 import os
 import re
+import textwrap
 
 import numpy as np
 import wx
@@ -3315,6 +3316,7 @@ class Gui(wx.Frame):
         self._file_text.Bind(
             wx.stc.EVT_STC_MARGINCLICK, self._on_error_margin_click
         )
+        self._file_text.Bind(wx.EVT_SIZE, self._on_file_text_size)
 
         viewer_sizer.Add(header_sizer, 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 4)
         viewer_sizer.Add(
@@ -3408,6 +3410,36 @@ class Gui(wx.Frame):
             )
             return False
 
+    def _wrap_annotation_text(self, text):
+        """Wrap annotation text to fit the editor's visible text area.
+
+        Uses TextWidth with the annotation style (40) so the measured
+        character width matches what the STC actually renders — including
+        the italic weight applied to annotations.
+        """
+        editor_w = self._file_text.GetClientSize().width
+        margin_w = sum(self._file_text.GetMarginWidth(i) for i in range(3))
+        available_w = max(100, editor_w - margin_w - 10)
+        try:
+            char_w = max(1, self._file_text.TextWidth(40, "X"))
+        except Exception:
+            char_w = 7
+        wrap_col = max(20, available_w // char_w)
+        result = []
+        for line in text.split("\n"):
+            if len(line) <= wrap_col:
+                result.append(line)
+            else:
+                indent = " " * (len(line) - len(line.lstrip()) + 2)
+                wrapped = textwrap.wrap(
+                    line,
+                    width=wrap_col,
+                    subsequent_indent=indent,
+                    break_long_words=True,
+                )
+                result.extend(wrapped or [line])
+        return "\n".join(result)
+
     def _highlight_errors(self, errors):
         """Mark error lines with a red dot, background, and collapsible annotation."""
         self._file_text.MarkerDeleteAll(0)
@@ -3430,7 +3462,9 @@ class Gui(wx.Frame):
                     first_line = ln
         # Show all annotations immediately; clicking the dot toggles them
         for ln, msg in self._error_map.items():
-            self._file_text.AnnotationSetText(ln, "  " + msg)
+            self._file_text.AnnotationSetText(
+                ln, self._wrap_annotation_text("  " + msg)
+            )
             self._file_text.AnnotationSetStyle(ln, 40)
         if first_line is not None:
             self._file_text.GotoLine(first_line)
@@ -3446,8 +3480,21 @@ class Gui(wx.Frame):
         if self._file_text.AnnotationGetText(ln):
             self._file_text.AnnotationSetText(ln, "")
         else:
-            self._file_text.AnnotationSetText(ln, "  " + self._error_map[ln])
+            self._file_text.AnnotationSetText(
+                ln, self._wrap_annotation_text("  " + self._error_map[ln])
+            )
             self._file_text.AnnotationSetStyle(ln, 40)
+
+    def _on_file_text_size(self, event):
+        """Re-wrap visible error annotations when the editor is resized."""
+        event.Skip()
+        if not self._error_map:
+            return
+        for ln, msg in self._error_map.items():
+            if self._file_text.AnnotationGetText(ln):
+                self._file_text.AnnotationSetText(
+                    ln, self._wrap_annotation_text("  " + msg)
+                )
 
     def _on_implement_viewer(self, event):
         """Use the file currently shown in the viewer as the active circuit."""
