@@ -780,9 +780,8 @@ class Parser:
                 caller_dev, caller_port, inst_in_id, inst_in_port
             )
             if error != self.network.NO_ERROR:
-                self.errors.append(
-                    f"Semantic Error: Instance input binding failed. E:{error}"
-                )
+                error_message = self._get_semantic_error() + f"Instance input binding failed. E:{error}"
+                self.errors.append(error_message)
                 self.error_count += 1
 
         instance_output_ids = []
