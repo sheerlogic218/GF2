@@ -3590,6 +3590,7 @@ class Gui(wx.Frame):
         """Switch between the 2D and 3D signal views."""
         self._is_3d = event.GetInt() == 1
         if self._is_3d:
+            self._auto_reset_view()
             # The progressive animation only applies to the 2D view.
             self.canvas.skip_animation()
             self.canvas.Hide()
