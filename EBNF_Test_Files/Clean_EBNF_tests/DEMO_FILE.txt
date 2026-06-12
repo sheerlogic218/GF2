@@ -1,0 +1,66 @@
+// ==========================================
+// LOGIC SIMULATOR - FEATURE TEST BENCH
+// ==========================================
+
+// --- 1. Parameter-less Module ---
+// Tests the new empty parenthesis instantiation
+module FastClockGen : -> ;
+    clock FAST_CLK[1];
+    monitor FAST_CLK;
+end;
+
+// --- 2. Standard Logic Module ---
+// Tests basic combinatorial math operators
+module HalfAdder : A, B -> SUM, CARRY ;
+    SUM = (A ^ B);
+    CARRY = (A * B);
+end;
+
+// --- 3. Complex Module ---
+// Tests internal RC components and D-Type port assignments
+module SafeMemory : DATA_IN, CLK_IN -> Q_OUT ;
+    rc POR[3]; // Power-On Reset (Starts HIGH, falls LOW after 3 cycles)
+    dtype MEM;
+    switch GROUND = 0; // Ground pin for the SET port
+
+    MEM.DATA <= DATA_IN;
+    MEM.CLK <= CLK_IN;
+    MEM.CLEAR <= POR;
+    MEM.SET <= GROUND;
+
+    Q_OUT = MEM.Q;
+end;
+
+// ==========================================
+// TOP LEVEL EXECUTION (THE BREADBOARD)
+// ==========================================
+
+// 1. Run the parameter-less clock (Anonymous)
+FastClockGen();
+
+// 2. Test the new top-level components
+siggen TEST_PATTERN = [1, 1, 0, 0, 1, 0];
+rc MAIN_RESET[5];
+
+// 3. Input switches
+switch SW_EN = 1;
+switch SW_DATA = 0;
+
+// 4. Test explicit instantiation
+HalfAdder ADDER1 (SW_EN, SW_DATA -> SUM_OUT, CARRY_OUT);
+
+// 5. Test anonymous instantiation (Using the siggen as an input)
+HalfAdder (SUM_OUT, TEST_PATTERN -> CASCADE_SUM, CASCADE_CARRY);
+
+// 6. Test chained combinatorial logic (implicit buffers + unary NOT)
+wire logic_test;
+logic_test = !(CASCADE_SUM + CASCADE_CARRY) * SW_EN;
+
+// ==========================================
+// MONITORS
+// ==========================================
+monitor TEST_PATTERN;
+monitor MAIN_RESET;
+monitor SUM_OUT;
+monitor CASCADE_SUM;
+monitor logic_test;
