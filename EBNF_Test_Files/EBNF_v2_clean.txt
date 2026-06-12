@@ -9,17 +9,21 @@ prog_defn   = "module" , name , ":"
 port_list   = [ port , { "," , port } ] ;
 port        = name , [ "[" , integer , "]" ] ;
 
-statement   = declaration| assignment| monitor | instance;
+statement   = declaration| assignment| monitor | instantiation;
 
 declaration = wire_decl
             | clock_decl
             | switch_decl
-            | dtype_decl ;
+            | dtype_decl
+            | siggen_decl
+            | rc_decl ;
 
 wire_decl   = "wire"   , name , ";" ;
 clock_decl  = "clock"  , name , "[" , integer , "]"     , ";" ;
 switch_decl = "switch" , name , "=" , ( "0" | "1" )     , ";" ;
 dtype_decl  = "dtype"  , name                           , ";" ;
+siggen_decl = "siggen" , name , "=" , "[" , ( "0" | "1" ) , { "," , ( "0" | "1" ) } , "]" , ";" ;
+rc_decl     = "rc"     , name , "[" , integer , "]"     , ";" ;
 
 (* assignments cover both combinatorial and port connections *)
 assignment  = lhs , ( "=" | "<=" ) , rhs , ";" ;
@@ -32,7 +36,7 @@ xor_expr    = factor    , { "^" , factor } ;
 factor      = [ "!" ]   , ( signal_ref | "(" , or_expr , ")" ) ;
 
 (* simple signal reference -- parser resolves what kind it is *)
-signal_ref  = name , [ "[" , integer , [ ":" , integer ] , "]" ] ;
+signal_ref  = name ;
 
 (* dtype port reference *)
 port_ref    = name , "." , port_name ;
@@ -40,7 +44,7 @@ port_name   = "CLK" | "DATA" | "SET" | "CLEAR" | "Q" | "QBAR" ;
 
 monitor     = "monitor" , ( signal_ref | port_ref ) , ";" ;
 
-instance	= "instance", name, name, "(", bind_list, "->", bind_list, ")", ";";
+instantiation	= name, [ name ] , "(", [ bind_list, "->", bind_list ] , ")", ";";
 
 bind_list  = [ signal_ref , { "," , signal_ref } ] ;
 
