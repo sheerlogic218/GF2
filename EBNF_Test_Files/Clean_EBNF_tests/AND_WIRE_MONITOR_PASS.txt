@@ -4,10 +4,12 @@ module and_gate : -> ;
     switch B = 1 ;
  
     wire out ;
- 
-    out = A + B ;
+
+    out = A * B;
  
     monitor out ;
- 
+
 end ;
- 
+
+
+and_gate();
