@@ -1,22 +1,16 @@
-program     = prog_defn , { prog_defn } ;
+program     = { mod_defn | statement } ;
 
-prog_defn   = "module" , name , ":"
+mod_defn   = "module" , name , ":"
             , port_list , "->" , port_list , ";"
             , { statement }
             , "end" , ";" ;
 
-(* ports just need name and optional width *)
-port_list   = [ port , { "," , port } ] ;
-port        = name , [ "[" , integer , "]" ] ;
+(* ports just need name *)
+port_list   = [ name , { "," , name } ] ;
 
 statement   = declaration| assignment| monitor | instantiation;
 
-declaration = wire_decl
-            | clock_decl
-            | switch_decl
-            | dtype_decl
-            | siggen_decl
-            | rc_decl ;
+declaration = wire_decl | clock_decl | switch_decl | dtype_decl | siggen_decl | rc_decl ;
 
 wire_decl   = "wire"   , name , ";" ;
 clock_decl  = "clock"  , name , "[" , integer , "]"     , ";" ;
@@ -30,6 +24,7 @@ assignment  = lhs , ( "=" | "<=" ) , rhs , ";" ;
 lhs         = signal_ref | port_ref ;
 rhs         = or_expr ;
 
+(*boolean expression*)
 or_expr     = and_expr  , { "+" , and_expr } ;
 and_expr    = xor_expr  , { "*" , xor_expr } ;
 xor_expr    = factor    , { "^" , factor } ;
