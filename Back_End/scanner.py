@@ -81,7 +81,7 @@ class Scanner:
             "switch",
             "dtype",
             "monitor",
-            "instance",
+            # "instance",
         ]
         self.punctuation = [
             "=",
@@ -133,7 +133,7 @@ class Scanner:
     def skip_comments(self) -> None:
         """Skip comments."""
         if self.get_current_char() + self.get_next_char() == "//":
-            while self.get_current_char() != "\n":
+            while self.get_current_char() not in ["\n", ""]:
                 self.advance()
             self.advance()
 

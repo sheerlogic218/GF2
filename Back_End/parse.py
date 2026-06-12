@@ -60,7 +60,8 @@ class Parser:
             self.monitors.MONITOR_PRESENT: "Monitor already present.",
         }
 
-        self.current_module_name = None  # "Main"
+        self.current_module_name = "Main"
+        self.anon_instance_count = 0
 
         # dict of { module_name : [ [inputs],[outputs] ] }
         self.module_mappings = {}
@@ -127,49 +128,48 @@ class Parser:
 
         return False
 
+    def check_inputs(self):
+        if self.error_count == 0:
+            unconnected = []
+            for device_id in self.devices.find_devices():
+                device = self.devices.get_device(device_id)
+                for input_id in device.inputs:
+                    if (
+                        self.network.get_connected_output(device_id, input_id)
+                        is None
+                    ):
+                        dev_name = self.names.get_pretty_name(device_id)
+                        port_name = self.names.get_pretty_name(input_id)
+                        unconnected.append(f"{dev_name}.{port_name}")
+
+            if unconnected:
+                self.errors.append(
+                    f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
+                )
+                self.error_count += 1
+
     def parse_network(self):
         """Parse the circuit definition file."""
         # TODO - temporary fix with try except look
         try:
             # get first symbol
             self.next_symbol()
-            last_module = None
 
             while self.symbol.type != Symbol.EOF:
-                self.parse_prog_defn()
-                last_module = self.current_module_name
+                if (
+                    self.symbol.type == Symbol.KEYWORD
+                    and self.symbol.text == "module"
+                ):
+                    self.parse_prog_defn()
+                else:
+                    self.parse_statement()
 
-            # load the last module
-            if last_module and self.error_count == 0:
-                self.instantiate_module(last_module, "Main", [], [])
-
-            # Explicit unconnected input check
-            if self.error_count == 0:
-                unconnected = []
-                for device_id in self.devices.find_devices():
-                    device = self.devices.get_device(device_id)
-                    for input_id in device.inputs:
-                        if (
-                            self.network.get_connected_output(
-                                device_id, input_id
-                            )
-                            is None
-                        ):
-                            dev_name = self.names.get_pretty_name(device_id)
-                            port_name = self.names.get_pretty_name(input_id)
-                            unconnected.append(f"{dev_name}.{port_name}")
-
-                if unconnected:
-                    self.errors.append(
-                        f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
-                    )
-                    self.error_count += 1
+            self.check_inputs()
         except SyntaxError:
             # next_symbol() raises SyntaxError for invalid characters and has
             # already appended the error message to self.errors.
             pass
-        # no errors, returns True
-        return self.error_count == 0
+        return self.error_count == 0  # no errors, returns True
 
     def _handle_module_header_error(self):
         """Handle module header errors."""
@@ -185,72 +185,86 @@ class Parser:
         self.next_symbol()
 
     def parse_prog_defn(self):
-        # Should start with module
-        if not self.expect(Symbol.KEYWORD, "module"):
-            self._handle_module_header_error()
-            return
+        previous_scope = self.current_module_name
+        try:
+            # Should start with module
+            if not self.expect(Symbol.KEYWORD, "module"):
+                self._handle_module_header_error()
+                return
 
-        # Then module name
-        if self.symbol.type == Symbol.NAME:
-            self.current_module_name = self.symbol.text
-            self.next_symbol()
-        else:
-            self.expect(Symbol.NAME)
-            self._handle_module_header_error()
-            return
+            # Then module name
+            if self.symbol.type == Symbol.NAME:
+                if self.symbol.text == "Main":
+                    error_message = (
+                        self._get_semantic_error()
+                        + "The module name 'Main' is reserved for the top-level scope."
+                    )
+                    self.errors.append(error_message)
+                    self.error_count += 1
+                    self._handle_module_header_error()
+                    return
+                self.current_module_name = self.symbol.text
+                self.next_symbol()
+            else:
+                self.expect(Symbol.NAME)
+                self._handle_module_header_error()
+                return
 
-        # Then inputs -> outputs
-        if not self.expect(Symbol.PUNCTUATION, ":"):
-            self._handle_module_header_error()
-            return
+            # Then inputs -> outputs
+            if not self.expect(Symbol.PUNCTUATION, ":"):
+                self._handle_module_header_error()
+                return
 
-        module_inputs, state = self.parse_port_list()
-        if not state:
-            self._handle_module_header_error()
-            return
+            module_inputs, state = self.parse_port_list()
+            if not state:
+                self._handle_module_header_error()
+                return
 
-        if not self.expect(Symbol.PUNCTUATION, "->"):
-            self._handle_module_header_error()
-            return
+            if not self.expect(Symbol.PUNCTUATION, "->"):
+                self._handle_module_header_error()
+                return
 
-        module_outputs, state = self.parse_port_list()
-        if not state:
-            self._handle_module_header_error()
-            return
+            module_outputs, state = self.parse_port_list()
+            if not state:
+                self._handle_module_header_error()
+                return
 
-        # Save module inputs/outputs to dict for instancing later
-        # TODO: come back to this
-        self.module_mappings[self.current_module_name] = {
-            "inputs": module_inputs,
-            "outputs": module_outputs,
-            "symbols": [],
-        }
+            # Save module inputs/outputs to dict for instancing later
+            self.module_mappings[self.current_module_name] = {
+                "inputs": module_inputs,
+                "outputs": module_outputs,
+                "symbols": [],
+            }
 
-        # End of module header
-        if not self.expect(Symbol.PUNCTUATION, ";"):
-            self._handle_module_header_error()
-            return
+            # End of module header
+            if not self.expect(Symbol.PUNCTUATION, ";"):
+                self._handle_module_header_error()
+                return
 
-        while not (
-            self.symbol.type == Symbol.KEYWORD and self.symbol.text == "end"
-        ):
-            # check for abrupt end of file before module finished
-            if self.symbol.type == Symbol.EOF:
-                error_message = (
-                    self._get_syntax_error() + "Unexpected End of File."
-                )
-                self.errors.append(error_message)
-                self.error_count += 1
-                break
-            # parse module lines
-            # self.parse_statement()
-            self.module_mappings[self.current_module_name]["symbols"].append(
-                self.symbol
-            )
-            self.next_symbol()
-        # end of module
-        self.expect(Symbol.KEYWORD, "end")
-        self.expect(Symbol.PUNCTUATION, ";")
+            while not (
+                self.symbol.type == Symbol.KEYWORD
+                and self.symbol.text == "end"
+            ):
+                # check for abrupt end of file before module finished
+                if self.symbol.type == Symbol.EOF:
+                    error_message = (
+                        self._get_syntax_error() + "Unexpected End of File."
+                    )
+                    self.errors.append(error_message)
+                    self.error_count += 1
+                    break
+                # parse module lines
+                # self.parse_statement()
+                self.module_mappings[self.current_module_name][
+                    "symbols"
+                ].append(self.symbol)
+                self.next_symbol()
+            # end of module
+            self.expect(Symbol.KEYWORD, "end")
+            self.expect(Symbol.PUNCTUATION, ";")
+        finally:
+            # restore scope
+            self.current_module_name = previous_scope
 
     def parse_port_list(self) -> tuple[list[str], bool]:
         ports = []
@@ -295,9 +309,9 @@ class Parser:
             elif self.symbol.text == "monitor":
                 # create monitor
                 self.parse_monitor()
-            elif self.symbol.text == "instance":
-                # create instance
-                self.parse_instance()
+            # elif self.symbol.text == "instance":
+            #     # create instance
+            #     self.parse_instance()
             else:
                 # mainly used in development for not implemented errors
                 error_message = (
@@ -309,7 +323,10 @@ class Parser:
                 self.next_symbol()
 
         elif self.symbol.type == Symbol.NAME:
-            self.parse_assignment()
+            if self.symbol.text in self.module_mappings:
+                self.parse_instance()
+            else:
+                self.parse_assignment()
         else:
             error_message = (
                 self._get_syntax_error()
@@ -380,6 +397,15 @@ class Parser:
                         continue
                     else:
                         break
+
+                if signals == []:
+                    error_message = (
+                        self._get_semantic_error()
+                        + "SIGGEN array cannot be empty."
+                    )
+                    self.errors.append(error_message)
+                    self.error_count += 1
+                    signals = [0]
 
                 self.devices.make_device(
                     siggen_id, self.devices.SIGGEN, signals
@@ -623,36 +649,40 @@ class Parser:
         self.expect(Symbol.PUNCTUATION, ";")
 
     def parse_instance(self) -> None:
-        self.expect(Symbol.KEYWORD, "instance")
-
-        # Module name
-        if self.symbol.type == Symbol.NAME:
-            # TODO: check module name exists
-            module_name = self.symbol.text
-            self.next_symbol()
-        else:
-            # TODO: error handling
-            # f"module {module_name} not found or declared yet."
-            self.expect(Symbol.NAME)
-            return
+        # self.expect(Symbol.KEYWORD, "instance")
+        module_name = self.symbol.text
+        self.next_symbol()
 
         # Instance name
         if self.symbol.type == Symbol.NAME:
             instance_name = self.symbol.text
             self.next_symbol()
+            self.expect(Symbol.PUNCTUATION, "(")
+        elif (
+            self.symbol.type == Symbol.PUNCTUATION and self.symbol.text == "("
+        ):
+            self.anon_instance_count += 1
+            instance_name = f"anon_{module_name}_{self.anon_instance_count}"
+            self.next_symbol()
         else:
-            self.expect(Symbol.NAME)
+            error_message = (
+                self._get_syntax_error()
+                + f"Expected instance name or '(', got '{self.symbol.text}'."
+            )
+            self.errors.append(error_message)
+            self.error_count += 1
+            # self.expect(Symbol.NAME)
             return
 
-        self.expect(Symbol.PUNCTUATION, "(")
+        if self.accept(Symbol.PUNCTUATION, ")"):
+            module_inputs = []
+            module_outputs = []
+        else:
+            module_inputs = self.parse_bind_list()
+            self.expect(Symbol.PUNCTUATION, "->")
+            module_outputs = self.parse_bind_list()
+            self.expect(Symbol.PUNCTUATION, ")")
 
-        module_inputs = self.parse_bind_list()
-
-        self.expect(Symbol.PUNCTUATION, "->")
-
-        module_outputs = self.parse_bind_list()
-
-        self.expect(Symbol.PUNCTUATION, ")")
         self.expect(Symbol.PUNCTUATION, ";")
 
         # check form of I/O against module def

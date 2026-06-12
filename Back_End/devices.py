@@ -328,7 +328,12 @@ class Devices:
                 device.clock_counter = random.randrange(
                     device.clock_half_period
                 )
-            # todo: siggen logic
+            elif device.device_kind == self.SIGGEN:
+                device.siggen_index = -1
+                initial_signal = device.signal_generator_data[0]
+                self.add_output(
+                    device.device_id, output_id=None, signal=initial_signal
+                )
             elif device.device_kind == self.RC:
                 device.rc_counter = 0
                 self.add_output(
