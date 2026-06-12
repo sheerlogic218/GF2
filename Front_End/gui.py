@@ -2601,6 +2601,7 @@ class Gui(wx.Frame):
 
         # ── Menu bar ────────────────────────────────────────────────────────
         fileMenu = wx.Menu()
+        fileMenu.Append(wx.ID_NEW, _("&New"))
         fileMenu.Append(wx.ID_OPEN, _("&Open"))
         fileMenu.Append(wx.ID_SAVE, _("&Save"))
         fileMenu.AppendSeparator()
@@ -3366,14 +3367,56 @@ class Gui(wx.Frame):
             self._viewer_menu_item.Check(False)
             self.SetStatusText(_("File viewer closed."))
 
+    def _on_new_viewer(self):
+        """Open the file viewer with a blank untitled file."""
+        self._viewer_path = None
+        self._file_text.SetText("")
+        self._file_text.MarkerDeleteAll(0)
+        self._file_text.MarkerDeleteAll(1)
+        self._file_text.AnnotationClearAll()
+        self._error_map = {}
+        self._viewer_title.SetLabel(_("File Viewer") + " — " + _("new file"))
+        self._viewer_title.SetToolTip("")
+        self._show_viewer()
+
+    def _do_save_as(self):
+        """Show a Save As dialog, write the file and update viewer state. Returns True on success."""
+        wildcard = _(
+            "Circuit definition files (*.txt)|*.txt|All files (*.*)|*.*"
+        )
+        dlg = wx.FileDialog(
+            self,
+            _("Save circuit definition file"),
+            wildcard=wildcard,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        )
+        result = False
+        if dlg.ShowModal() == wx.ID_OK:
+            path = dlg.GetPath()
+            self._viewer_path = path
+            filename = path.split("/")[-1].split("\\")[-1]
+            self._viewer_title.SetLabel(_("File Viewer") + f" — {filename}")
+            self._viewer_title.SetToolTip(path)
+            self.SetTitle("Logic Simulator - " + path)
+            try:
+                with open(path, "w") as fh:
+                    fh.write(self._file_text.GetText())
+                self.SetStatusText(_("Saved: %s") % path)
+                self.log(_("File saved: %s") % path)
+                result = True
+            except OSError as exc:
+                wx.MessageBox(
+                    _("Could not save file:\n%s") % exc,
+                    _("Save Error"),
+                    wx.ICON_ERROR | wx.OK,
+                )
+        dlg.Destroy()
+        return result
+
     def _on_save_viewer(self, event):
         """Save the current contents of the file viewer back to disk."""
         if not self._viewer_path:
-            wx.MessageBox(
-                _("No file is open — nothing to save."),
-                _("Save"),
-                wx.ICON_WARNING | wx.OK,
-            )
+            self._do_save_as()
             return
         try:
             with open(self._viewer_path, "w") as fh:
@@ -3390,12 +3433,7 @@ class Gui(wx.Frame):
     def _save_viewer_contents(self):
         """Save viewer contents and return whether it succeeded."""
         if not self._viewer_path:
-            wx.MessageBox(
-                _("No file is open - nothing to implement."),
-                _("Implement"),
-                wx.ICON_WARNING | wx.OK,
-            )
-            return False
+            return self._do_save_as()
         try:
             with open(self._viewer_path, "w") as fh:
                 fh.write(self._file_text.GetText())
@@ -3720,6 +3758,9 @@ class Gui(wx.Frame):
         Id = event.GetId()
         if Id == wx.ID_EXIT:
             self.Close(True)
+
+        elif Id == wx.ID_NEW:
+            self._on_new_viewer()
 
         elif Id == wx.ID_ABOUT:
             wx.MessageBox(
