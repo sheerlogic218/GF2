@@ -335,7 +335,7 @@ class Devices:
                     device.device_id, output_id=None, signal=initial_signal
                 )
             elif device.device_kind == self.RC:
-                device.rc_counter = 0
+                device.rc_counter = -1
                 self.add_output(
                     device.device_id, output_id=None, signal=self.HIGH
                 )
