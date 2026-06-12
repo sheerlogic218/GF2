@@ -3417,7 +3417,7 @@ class Gui(wx.Frame):
         for err in errors:
             m = re.search(r"at\s+(?:line\s+)?(\d+)", err)
             if m:
-                ln = int(m.group(1)) - 1  # STC lines are 0-indexed
+                ln = max(0, int(m.group(1)) - 1)  # STC lines are 0-indexed
                 # Accumulate multiple errors on the same line
                 if ln in self._error_map:
                     self._error_map[ln] += "\n  " + err
@@ -3585,7 +3585,7 @@ class Gui(wx.Frame):
         # briefly alive, so the user could click the language dropdown again
         # before CallAfter(Destroy) fires, scheduling a second Destroy() on an
         # already-destroyed frame and crashing.
-        if getattr(self, '_applying_language', False):
+        if getattr(self, "_applying_language", False):
             return
         self._applying_language = True
 

@@ -210,6 +210,16 @@ class Parser:
                 self._handle_module_header_error()
                 return
 
+            if self.current_module_name in self.module_mappings:
+                error_message = (
+                    self._get_semantic_error()
+                    + f"Duplicate module definition '{self.current_module_name}'"
+                )
+                self.errors.append(error_message)
+                self.error_count += 1
+                self._handle_module_header_error()
+                return
+
             # Then inputs -> outputs
             if not self.expect(Symbol.PUNCTUATION, ":"):
                 self._handle_module_header_error()
@@ -464,10 +474,9 @@ class Parser:
     def parse_assignment(self) -> None:
         """Parse an assignment and connect the RHS to the LHS."""
         target_device_id, target_port_id = self.parse_lhs()
-        target_text = self.names.get_pretty_name(target_device_id)
         if target_device_id is None:
-            # error handled upstream
             return
+        target_text = self.names.get_pretty_name(target_device_id)
 
         if not (
             self.accept(Symbol.PUNCTUATION, "=")
@@ -517,9 +526,22 @@ class Parser:
             "AND": [self.parse_xor_expr, "*", self.devices.AND],
             "XOR": [self.parse_factor, "^", self.devices.XOR],
         }
-        inputs = [gates[gate_type][0]()]
-        while self.accept(Symbol.PUNCTUATION, gates[gate_type][1]):
-            inputs.append(gates[gate_type][0]())
+
+        gate_info = gates.get(gate_type)
+        if gate_info is None:
+            self.errors.append(
+                self._get_semantic_error()
+                + f"Internal Error: Unknown gate type '{gate_type}'."
+            )
+            self.error_count += 1
+            return None, None
+
+        inputs = [gate_info[0]()]
+        operator = gate_info[1]
+        device_kind = gate_info[2]
+
+        while self.accept(Symbol.PUNCTUATION, operator):
+            inputs.append(gate_info[0]())
 
         if len(inputs) == 1:
             return inputs[0]
@@ -535,15 +557,24 @@ class Parser:
         if gate_type == "XOR":
             if len(inputs) == 2:
                 # XOR gates need 2 inputs
-                self.devices.make_device(gate_id, gates[gate_type][2], None)
+                self.devices.make_device(gate_id, device_kind, None)
             else:
-                error_message = f"Semantic Error: Failed to create XOR gate, only 2 inputs allowed. Use brackets to separate into pairs."
+                error_message = (
+                    self._get_semantic_error()
+                    + "Failed to create XOR gate, only 2 inputs allowed. Use brackets to separate into pairs."
+                )
                 self.errors.append(error_message)
                 self.error_count += 1
         else:
-            self.devices.make_device(gate_id, gates[gate_type][2], len(inputs))
+            self.devices.make_device(gate_id, device_kind, len(inputs))
 
-        for i, (src_dev, src_port) in enumerate(inputs, start=1):
+        for i, source in enumerate(inputs, start=1):
+            if source is None or source == (None, None):
+                continue
+            src_dev, src_port = source
+            if src_dev is None:
+                continue
+
             [input_port_id] = self.names.lookup([f"I{i}__{gate_id}"])
 
             # create device if it doesnt exist
@@ -596,7 +627,7 @@ class Parser:
 
         return signal
 
-    def parse_signal_or_port_ref(self) -> tuple[str, str]:
+    def parse_signal_or_port_ref(self) -> tuple[str | None, str | None]:
         # Capture the device name
         if self.symbol.type == Symbol.NAME:
             name = f"__{self.symbol.text}__{self.current_module_name}__"
@@ -627,6 +658,7 @@ class Parser:
                 )
                 self.errors.append(error_message)
                 self.error_count += 1
+                return None, None
 
         return device_id, port_id
 
@@ -658,12 +690,10 @@ class Parser:
             instance_name = self.symbol.text
             self.next_symbol()
             self.expect(Symbol.PUNCTUATION, "(")
-        elif (
-            self.symbol.type == Symbol.PUNCTUATION and self.symbol.text == "("
-        ):
+
+        elif self.accept(Symbol.PUNCTUATION, "("):
             self.anon_instance_count += 1
             instance_name = f"anon_{module_name}_{self.anon_instance_count}"
-            self.next_symbol()
         else:
             error_message = (
                 self._get_syntax_error()
@@ -688,6 +718,9 @@ class Parser:
         # check form of I/O against module def
         expected_inputs = self.module_mappings[module_name]["inputs"]
         expected_outputs = self.module_mappings[module_name]["outputs"]
+
+        mismatch = False
+
         if len(module_inputs) != len(expected_inputs):
             error_message = (
                 self._get_semantic_error()
@@ -695,6 +728,7 @@ class Parser:
             )
             self.errors.append(error_message)
             self.error_count += 1
+            mismatch = True
         if len(module_outputs) != len(expected_outputs):
             error_message = (
                 self._get_semantic_error()
@@ -702,6 +736,10 @@ class Parser:
             )
             self.errors.append(error_message)
             self.error_count += 1
+            mismatch = True
+
+        if mismatch:
+            return
 
         # re-instantiate the module in this place
         unique_instance_scope = f"{instance_name}__{self.current_module_name}"
@@ -734,6 +772,9 @@ class Parser:
         for caller_sig, inst_in_id in zip(bound_inputs, instance_input_ids):
             caller_dev, caller_port = caller_sig
 
+            if caller_dev is None:
+                continue
+
             if self.devices.get_device(caller_dev) is None:
                 self.devices.make_device(caller_dev, self.devices.AND, 1)
 
@@ -755,6 +796,9 @@ class Parser:
             instance_output_ids.append(inst_out_id)
         for inst_out_id, caller_sig in zip(instance_output_ids, bound_outputs):
             caller_dev, caller_port = caller_sig
+
+            if caller_dev is None:
+                continue
 
             if self.devices.get_device(caller_dev) is None:
                 self.devices.make_device(caller_dev, self.devices.AND, 1)
@@ -790,6 +834,9 @@ class Parser:
                     return sym
                 sym = Symbol()
                 sym.type = Symbol.EOF
+                if self.symbols:
+                    sym.line = self.symbols[-1].line
+                    sym.pos = self.symbols[-1].pos
                 return sym
 
         stream = TokenStream(template["symbols"])

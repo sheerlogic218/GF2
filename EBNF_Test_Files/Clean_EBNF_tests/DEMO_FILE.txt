@@ -13,7 +13,7 @@ end;
 // Tests basic combinatorial math operators
 module HalfAdder : A, B -> SUM, CARRY ;
     SUM = (A ^ B);
-    CARRY = (A * B);
+    CARRY = (A * );
 end;
 
 // --- 3. Complex Module ---

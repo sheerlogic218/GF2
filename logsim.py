@@ -20,7 +20,6 @@ from Front_End import *
 from Back_End import *
 
 
-
 def main(arg_list):
     """Parse the command line options and arguments specified in arg_list.
 
@@ -71,10 +70,6 @@ def main(arg_list):
         try:
             if parser.parse_network():
 
-                # for device in parser.devices.devices_dict.values():
-                #     print(parser.names.inv_name_IDS[device.device_kind])
-                # print(parser.names.inv_name_IDS)
-
                 # Initialise an instance of the gui.Gui() class
                 app = wx.App()
                 _app_locale = _setup_locale(app)  # noqa: F841 – keep alive
@@ -104,11 +99,17 @@ def _setup_locale(app: wx.App) -> wx.Locale:
         LANG=fr_FR python logsim.py <file>          # Linux/macOS
         $env:LANG="fr_FR"; python logsim.py <file>  # PowerShell
     """
-    locale_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Front_End/locale")
+    locale_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "Front_End/locale"
+    )
     wx.Locale.AddCatalogLookupPathPrefix(locale_dir)
 
     lang_str = os.environ.get("LANG", os.environ.get("LANGUAGE", "")).lower()
-    wx_lang = wx.LANGUAGE_FRENCH if lang_str.startswith("fr") else wx.LANGUAGE_DEFAULT
+    wx_lang = (
+        wx.LANGUAGE_FRENCH
+        if lang_str.startswith("fr")
+        else wx.LANGUAGE_DEFAULT
+    )
 
     locale = wx.Locale()
     locale.Init(wx_lang, wx.LOCALE_DONT_LOAD_DEFAULT)
