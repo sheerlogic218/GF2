@@ -1086,6 +1086,11 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                 self.draw_cuboid(
                     x_c, z_center, CYCLE_W / 2 - 0.5, TRACE_DEPTH / 2, h
                 )
+                if state in (self.devices.HIGH, self.devices.LOW):
+                    label = "1" if state == self.devices.HIGH else "0"
+                    GL.glColor3f(1.0, 1.0, 1.0)
+                    self._render_text_top(label, x_c, -6 + h, z_center)
+                    GL.glColor3f(*color)
 
         # Shared extents used by the floor grid, planes, and labels
         x_lo = -(max_cycles / 2.0) * CYCLE_W
@@ -1322,6 +1327,59 @@ class MyGL3DCanvas(wxcanvas.GLCanvas):
                 GL.glRasterPos3f(x_pos, y_pos, z_pos)
             else:
                 GLUT.glutBitmapCharacter(font, ord(ch))
+        GL.glEnable(GL.GL_LIGHTING)
+
+    def _render_text_top(self, text, x, y, z):
+        """Render stroke text lying flat on the top face of a cuboid (XZ plane).
+
+        Text is only visible from above; from the side it is edge-on and
+        invisible because it is genuine 3D geometry (not a billboard).
+        """
+        GL.glDisable(GL.GL_LIGHTING)
+
+        # Smooth, thick strokes.
+        GL.glEnable(GL.GL_LINE_SMOOTH)
+        GL.glHint(GL.GL_LINE_SMOOTH_HINT, GL.GL_NICEST)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+
+        scale = 0.12 * self.x_zoom
+        total_w = sum(
+            GLUT.glutStrokeWidth(GLUT.GLUT_STROKE_ROMAN, ord(ch)) for ch in text
+        )
+        char_h = 119.05  # GLUT_STROKE_ROMAN cap height in font units
+
+        # Build the shared transform: centred over (x, z), just above y.
+        def _setup_matrix(x_off, z_off):
+            GL.glPushMatrix()
+            GL.glTranslatef(
+                x - total_w * scale / 2.0 + x_off,
+                y + 0.15,
+                z + char_h * scale / 2.0 + z_off,
+            )
+            GL.glRotatef(-90.0, 1.0, 0.0, 0.0)
+            GL.glScalef(scale, scale, scale)
+
+        # Shadow pass – dark, slightly offset, thinner.
+        GL.glLineWidth(1.5)
+        GL.glColor4f(0.0, 0.0, 0.0, 0.55)
+        _setup_matrix(0.15, 0.15)
+        for ch in text:
+            GLUT.glutStrokeCharacter(GLUT.GLUT_STROKE_ROMAN, ord(ch))
+        GL.glPopMatrix()
+
+        # Main pass – white, bold strokes.
+        GL.glLineWidth(2.5)
+        GL.glColor4f(1.0, 1.0, 1.0, 1.0)
+        _setup_matrix(0.0, 0.0)
+        for ch in text:
+            GLUT.glutStrokeCharacter(GLUT.GLUT_STROKE_ROMAN, ord(ch))
+        GL.glPopMatrix()
+
+        # Restore state.
+        GL.glLineWidth(1.0)
+        GL.glDisable(GL.GL_LINE_SMOOTH)
+        GL.glDisable(GL.GL_BLEND)
         GL.glEnable(GL.GL_LIGHTING)
 
     def _show_context_menu(self):
@@ -2601,7 +2659,7 @@ class Gui(wx.Frame):
 
         # ── Menu bar ────────────────────────────────────────────────────────
         fileMenu = wx.Menu()
-        fileMenu.Append(wx.ID_NEW, _("&New"))
+        fileMenu.Append(wx.ID_NEW, _("&New File"))
         fileMenu.Append(wx.ID_OPEN, _("&Open"))
         fileMenu.Append(wx.ID_SAVE, _("&Save"))
         fileMenu.AppendSeparator()

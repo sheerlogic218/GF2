@@ -8,7 +8,9 @@ switch d = 0;
 
 wire z;
 
-NAND (x,y -> z);
+NAND (x,y-> z);
+
+
 
 monitor z;
 

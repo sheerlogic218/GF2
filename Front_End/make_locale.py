@@ -18,6 +18,7 @@ TRANSLATIONS_FR = {
 
     # ── Menus ────────────────────────────────────────────────────────────────
     "&File": "&Fichier",
+    "&New File": "&Nouveau fichier",
     "&Open": "&Ouvrir",
     "&Save": "&Enregistrer",
     "&About": "À &propos",
@@ -46,6 +47,7 @@ TRANSLATIONS_FR = {
     "ON": "Marche",
     "OFF": "Arrêt",
     "Save": "Enregistrer",
+    "Save As": "Enregistrer sous",
     "Implement": "Implémenter",
     "File Viewer": "Visionneuse",
     "Skip": "Passer",
@@ -93,6 +95,8 @@ TRANSLATIONS_FR = {
         "Nombre de cycles récents à afficher",
     "Save changes to file":
         "Enregistrer les modifications dans le fichier",
+    "Save file to a new location or name":
+        "Enregistrer le fichier à un nouvel emplacement ou sous un nouveau nom",
     "Run the simulator using this file":
         "Exécuter le simulateur avec ce fichier",
     "Close file viewer":
@@ -201,6 +205,7 @@ TRANSLATIONS_FR = {
     "Low": "Bas",
     "HIGH": "HAUT",
     "LOW": "BAS",
+    "new file": "nouveau fichier",
     "To simulate press play": "Pour simuler, appuyez sur lecture",
 
     # ── Monitor list suffix ───────────────────────────────────────────────────
@@ -292,6 +297,7 @@ TRANSLATIONS_EL = {
 
     # ── Menus ────────────────────────────────────────────────────────────────
     "&File": "&Αρχείο",
+    "&New File": "&Νέο αρχείο",
     "&Open": "&Άνοιγμα",
     "&Save": "&Αποθήκευση",
     "&About": "&Σχετικά",
@@ -320,6 +326,7 @@ TRANSLATIONS_EL = {
     "ON": "Ενεργό",
     "OFF": "Ανενεργό",
     "Save": "Αποθήκευση",
+    "Save As": "Αποθήκευση ως",
     "Implement": "Υλοποίηση",
     "File Viewer": "Προβολή Αρχείου",
     "Skip": "Παράλειψη",
@@ -366,6 +373,8 @@ TRANSLATIONS_EL = {
         "Αριθμός πρόσφατων κύκλων για εμφάνιση",
     "Save changes to file":
         "Αποθήκευση αλλαγών στο αρχείο",
+    "Save file to a new location or name":
+        "Αποθήκευση αρχείου σε νέα τοποθεσία ή με νέο όνομα",
     "Run the simulator using this file":
         "Εκτέλεση προσομοιωτή με αυτό το αρχείο",
     "Close file viewer":
@@ -474,6 +483,7 @@ TRANSLATIONS_EL = {
     "Low": "Χαμηλό",
     "HIGH": "ΥΨΗΛΟ",
     "LOW": "ΧΑΜΗΛΟ",
+    "new file": "νέο αρχείο",
     "To simulate press play": "Για προσομοίωση πατήστε αναπαραγωγή",
 
     # ── Monitor list suffix ───────────────────────────────────────────────────
