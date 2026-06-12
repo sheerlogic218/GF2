@@ -3235,6 +3235,12 @@ class Gui(wx.Frame):
         save_btn.SetToolTip(_("Save changes to file"))
         save_btn.Bind(wx.EVT_BUTTON, self._on_save_viewer)
 
+        save_as_btn = FlatButton(
+            self.viewer_panel, _("Save As"), variant="filled", size=(74, 28)
+        )
+        save_as_btn.SetToolTip(_("Save file to a new location or name"))
+        save_as_btn.Bind(wx.EVT_BUTTON, self._on_save_as_viewer)
+
         implement_btn = FlatButton(
             self.viewer_panel, _("Implement"), variant="filled", size=(88, 28)
         )
@@ -3251,6 +3257,7 @@ class Gui(wx.Frame):
             self._viewer_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 6
         )
         header_sizer.Add(save_btn, 0, wx.ALL, 2)
+        header_sizer.Add(save_as_btn, 0, wx.ALL, 2)
         header_sizer.Add(implement_btn, 0, wx.ALL, 2)
         header_sizer.Add(close_btn, 0, wx.ALL, 2)
 
@@ -3429,6 +3436,10 @@ class Gui(wx.Frame):
                 _("Save Error"),
                 wx.ICON_ERROR | wx.OK,
             )
+
+    def _on_save_as_viewer(self, event):
+        """Save the current file viewer contents to a new location or name."""
+        self._do_save_as()
 
     def _save_viewer_contents(self):
         """Save viewer contents and return whether it succeeded."""

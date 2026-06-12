@@ -1,0 +1,24 @@
+switch x = 0;
+
+switch y = 0;
+
+switch d = 0;
+
+
+
+wire z;
+
+NAND (x,y -> z);
+
+monitor z;
+
+
+
+wire xor_out;
+
+XOR (x,y -> xor_out);
+
+
+
+
+
