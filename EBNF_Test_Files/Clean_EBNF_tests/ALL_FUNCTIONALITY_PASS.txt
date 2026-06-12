@@ -6,28 +6,31 @@ module xor : input1, input2 -> output;
 	output = input1^input2;
 end;
 
-module client_requests : -> ;
-	clock client_clk[2];
-	dtype client_dtype;
+// Top level execution directly
+clock client_clk[2];
+dtype client_dtype;
 
-	switch sw1 = 0;
-	switch sw2 = 0;
-	switch sw3 = 0;
-	switch sw4 = 1;
-	switch sw5 = 0;
-	switch sw6 = 1;
-	switch sw7 = 0;
-	
-	wire bob;
-	wire bill;
-	instance a4inputnand gareth (sw1, sw2, sw3, sw4 -> bob);
-	instance xor john (sw5, sw6 -> bill);
+switch sw1 = 0;
+switch sw2 = 0;
+switch sw3 = 0;
+switch sw4 = 1;
+switch sw5 = 0;
+switch sw6 = 1;
+switch sw7 = 0;
 
-	client_dtype.DATA <= bob;
-	client_dtype.CLK <= client_clk;
-	client_dtype.SET <= bill;
-	client_dtype.CLEAR <= sw7;
+wire bob;
+wire bill;
 
-	monitor client_dtype.Q;
-	monitor client_dtype.QBAR;
-end;
+// Explicitly named instantiation
+a4inputnand gareth (sw1, sw2, sw3, sw4 -> bob);
+
+// Anonymous instantiation
+xor (sw5, sw6 -> bill);
+
+client_dtype.DATA <= bob;
+client_dtype.CLK <= client_clk;
+client_dtype.SET <= bill;
+client_dtype.CLEAR <= sw7;
+
+monitor client_dtype.Q;
+monitor client_dtype.QBAR;
