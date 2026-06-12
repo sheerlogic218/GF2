@@ -9,8 +9,6 @@ Classes
 Parser - parses the definition file and builds the logic network.
 """
 
-# TODO look at the issue of comments causing crash instead of error
-
 import uuid
 
 from .scanner import Symbol
@@ -150,7 +148,6 @@ class Parser:
 
     def parse_network(self):
         """Parse the circuit definition file."""
-        # TODO - temporary fix with try except look
         try:
             # get first symbol
             self.next_symbol()

@@ -62,13 +62,21 @@ class Scanner:
 
     def __init__(self, path: str, names: Names) -> None:
         """Open specified file and initialise reserved words and IDs."""
-        # handle file errors
+        self.stdlib = (
+            "module AND : A, B -> OUT ; OUT = (A * B); end;\n"
+            "module OR : A, B -> OUT ; OUT = (A + B); end;\n"
+            "module NOT : A -> OUT ; OUT = !A; end;\n"
+            "module NAND : A, B -> OUT ; OUT = !(A * B); end;\n"
+            "module NOR : A, B -> OUT ; OUT = !(A + B); end;\n"
+            "module XOR : A, B -> OUT ; OUT = (A ^ B); end;\n"
+        )
         with open(path, "r") as f:
-            self.text = f.read()
+            user_text = f.read()
 
+        self.text = self.stdlib + user_text
         self.names = names
         self.ptr = 0
-        self.line_count = 1
+        self.line_count = 1 - self.stdlib.count("\n")
         self.line_position = 1
 
         self.keywords = [
@@ -99,8 +107,6 @@ class Scanner:
             ")",
             " ",
         ]
-        # NAND, NOR ARE FUCKED
-        # TODO
         self.names.lookup(self.keywords)
 
     def advance(self) -> None:

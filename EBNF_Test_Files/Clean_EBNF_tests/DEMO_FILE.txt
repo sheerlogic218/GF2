@@ -13,7 +13,7 @@ end;
 // Tests basic combinatorial math operators
 module HalfAdder : A, B -> SUM, CARRY ;
     SUM = (A ^ B);
-    CARRY = (A * );
+    CARRY = (A * B);
 end;
 
 // --- 3. Complex Module ---
@@ -55,6 +55,8 @@ HalfAdder (SUM_OUT, TEST_PATTERN -> CASCADE_SUM, CASCADE_CARRY);
 // 6. Test chained combinatorial logic (implicit buffers + unary NOT)
 wire logic_test;
 logic_test = !(CASCADE_SUM + CASCADE_CARRY) * SW_EN;
+AND(SW_EN,SW_DATA->BEANS);
+monitor BEANS;
 
 // ==========================================
 // MONITORS
