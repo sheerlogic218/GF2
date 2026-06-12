@@ -1,0 +1,14 @@
+// RC and siggen tests
+
+rc rc_fast [3];
+rc rc_medium [7];
+rc rc_long[20];
+
+
+
+siggen usually_high = [1,1,1,1,0];
+monitor rc_fast;
+monitor rc_medium;
+monitor rc_long;
+
+monitor usually_high;

@@ -1,0 +1,13 @@
+module declaration_order : -> ;
+
+	monitor meow;
+	meow = switch_correct1^switch_correct2*switch_wrong;
+	switch switch_correct1 = 0;
+	switch switch_correct2 = 1;
+	switch switch_wrong = 1;
+	
+	wire meow;
+	
+end;
+
+declaration_order()

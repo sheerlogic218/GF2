@@ -1,0 +1,6 @@
+module period0_clock : -> output;
+	clock clk [0];
+	output = !clk;
+	monitor output
+
+end;

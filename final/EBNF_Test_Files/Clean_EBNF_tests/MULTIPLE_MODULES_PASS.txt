@@ -1,0 +1,27 @@
+module half_adder : C -> ;
+ 
+    switch A = 0 ;
+    switch B = 0 ;
+ 
+    wire sum ;
+    wire carry ;
+
+    sum   = A ^ B ;
+    carry = A * B ;
+ 
+    monitor sum ;
+    monitor carry ;
+
+end ;
+ 
+module instantiation : -> ;
+switch X = 1 ;
+wire out ;
+
+out = !X ;
+half_adder barry(X->);
+monitor out ;
+end;
+
+instantiation();
+ 

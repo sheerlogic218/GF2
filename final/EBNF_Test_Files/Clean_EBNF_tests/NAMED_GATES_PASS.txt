@@ -1,0 +1,22 @@
+//  Sub-module: 2-input NAND  
+module nand : A , B -> Y;
+
+    Y = !(A * B) ;
+
+end ;
+
+switch sw_a = 1 ;
+switch sw_b = 0 ;
+switch sw_c = 1 ;
+
+wire out1 ;
+wire out2 ;
+
+// Nand gate named james
+nand james( sw_a , sw_b -> out1 ) ;
+
+// Nand gate names adam
+nand adam( sw_b , sw_c -> out2 ) ;
+
+monitor out1 ;
+monitor out2 ;

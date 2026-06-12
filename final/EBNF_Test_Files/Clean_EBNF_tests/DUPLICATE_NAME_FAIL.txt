@@ -1,0 +1,9 @@
+module duplicate_name  : -> bacon;
+
+	switch bacon = 0;
+	switch ham = 1;
+
+	bacon = bacon+ham;
+	
+	monitor bacon;
+end;

@@ -1,0 +1,8 @@
+module double_assignment: -> y;
+	switch a = 0;
+	switch b = 0;
+	switch c = 0;
+	y = a*b;
+	y = b+c;
+	monitor y;
+end;

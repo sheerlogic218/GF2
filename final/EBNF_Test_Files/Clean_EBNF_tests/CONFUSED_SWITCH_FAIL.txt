@@ -1,0 +1,7 @@
+module weird_port: -> ;
+	switch a = 0;
+	switch b = 1;
+	wire meow;
+	meow = a.Q + b;
+	monitor meow;
+end;

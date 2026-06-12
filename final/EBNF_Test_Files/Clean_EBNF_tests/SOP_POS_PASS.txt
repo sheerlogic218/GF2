@@ -1,0 +1,19 @@
+module top_module : -> out_sop, out_pos ;
+    switch a = 0;
+    switch b = 0;
+    switch c = 0;
+    switch d = 0;
+    // sum of products expression
+    out_sop = (c * d) + (c * !a * !b) ;
+
+    // product of sums expression
+    out_pos = c * (b + !a) * (!b + !c + d) ;
+
+
+end ;
+
+wire x;
+wire y;
+top_module(-> x,y);
+monitor x;
+monitor y;
