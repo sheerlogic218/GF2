@@ -113,7 +113,7 @@ class Network:
         return None
 
     def make_connection(
-            self, first_device_id, first_port_id, second_device_id, second_port_id
+        self, first_device_id, first_port_id, second_device_id, second_port_id
     ):
         """Connect the first device to the second device.
 
@@ -134,7 +134,10 @@ class Network:
                 error_type = self.INPUT_TO_INPUT
             elif second_port_id in second_device.outputs:
                 # Make connection
-                first_device.inputs[first_port_id] = (second_device_id, second_port_id)
+                first_device.inputs[first_port_id] = (
+                    second_device_id,
+                    second_port_id,
+                )
                 error_type = self.NO_ERROR
             else:  # second_port_id is not a valid input or output port
                 error_type = self.PORT_ABSENT
@@ -248,7 +251,9 @@ class Network:
 
         if device.device_kind == self.devices.XOR:
             # Output is high only if both inputs are different
-            if input_signal_list[0] == input_signal_list[1]:  # assume two inputs
+            if (
+                input_signal_list[0] == input_signal_list[1]
+            ):  # assume two inputs
                 output_signal = self.devices.LOW
             else:
                 output_signal = self.devices.HIGH
@@ -339,6 +344,48 @@ class Network:
         else:
             return False
 
+    def execute_siggen(self, device_id):
+        """Simulate a generator device and update its output signal value."""
+        device = self.devices.get_device(device_id)
+        output_signal = device.outputs[None]
+
+        if output_signal == self.devices.RISING:
+            new_signal = self.update_signal(output_signal, self.devices.HIGH)
+            if new_signal is None:  # update is unsuccessful
+                return False
+            device.outputs[None] = new_signal
+            return True
+
+        elif output_signal == self.devices.FALLING:
+            new_signal = self.update_signal(output_signal, self.devices.LOW)
+            if new_signal is None:  # update is unsuccessful
+                return False
+            device.outputs[None] = new_signal
+            return True
+
+        elif output_signal in [self.devices.HIGH, self.devices.LOW]:
+            return True
+
+        else:
+            return False
+
+    def execute_rc(self, device_id):
+        """Simulate an RC device and update its output signal value."""
+        device = self.devices.get_device(device_id)
+        output_signal = device.outputs[None]
+
+        if output_signal == self.devices.FALLING:
+            new_signal = self.update_signal(output_signal, self.devices.LOW)
+            if new_signal is None:
+                return False
+            device.outputs[None] = new_signal
+            return True
+
+        elif output_signal in [self.devices.HIGH, self.devices.LOW]:
+            return True
+        else:
+            return False
+
     def update_clocks(self):
         """If it is time to do so, set clock signals to RISING or FALLING."""
         clock_devices = self.devices.find_devices(self.devices.CLOCK)
@@ -346,12 +393,47 @@ class Network:
             device = self.devices.get_device(device_id)
             if device.clock_counter == device.clock_half_period:
                 device.clock_counter = 0
-                output_signal = self.get_output_signal(device_id, output_id=None)
+                output_signal = self.get_output_signal(
+                    device_id, output_id=None
+                )
                 if output_signal == self.devices.HIGH:
                     device.outputs[None] = self.devices.FALLING
                 elif output_signal == self.devices.LOW:
                     device.outputs[None] = self.devices.RISING
             device.clock_counter += 1
+
+    def update_siggens(self):
+        """If it is time to do so, set siggen signals to RISING or FALLING."""
+        siggen_devices = self.devices.find_devices(self.devices.SIGGEN)
+        for device_id in siggen_devices:
+            device = self.devices.get_device(device_id)
+
+            device.siggen_index = (device.siggen_index + 1) % len(
+                device.signal_generator_data
+            )
+            next_signal = device.signal_generator_data[device.siggen_index]
+            output_signal = self.get_output_signal(device_id, output_id=None)
+
+            if (
+                output_signal == self.devices.HIGH
+                and next_signal == self.devices.LOW
+            ):
+                device.outputs[None] = self.devices.FALLING
+            elif (
+                output_signal == self.devices.LOW
+                and next_signal == self.devices.HIGH
+            ):
+                device.outputs[None] = self.devices.RISING
+
+    def update_rcs(self):
+        """If the required cycles have elapsed, set RC signals to FALLING."""
+        rc_devices = self.devices.find_devices(self.devices.RC)
+        for device_id in rc_devices:
+            device = self.devices.get_device(device_id)
+            if device.rc_counter < device.rc_time_constant:
+                device.rc_counter += 1
+                if device.rc_counter == device.rc_time_constant:
+                    device.outputs[None] = self.devices.FALLING
 
     def execute_network(self):
         """Execute all the devices in the network for one simulation cycle.
@@ -359,6 +441,8 @@ class Network:
         Return True if successful and the network does not oscillate.
         """
         clock_devices = self.devices.find_devices(self.devices.CLOCK)
+        siggen_devices = self.devices.find_devices(self.devices.SIGGEN)
+        rc_devices = self.devices.find_devices(self.devices.RC)
         switch_devices = self.devices.find_devices(self.devices.SWITCH)
         d_type_devices = self.devices.find_devices(self.devices.D_TYPE)
         and_devices = self.devices.find_devices(self.devices.AND)
@@ -369,7 +453,8 @@ class Network:
 
         # This sets clock signals to RISING or FALLING, where necessary
         self.update_clocks()
-
+        self.update_siggens()
+        self.update_rcs()
         # Number of iterations to wait for the signals to settle before
         # declaring the network unstable
         iteration_limit = 20
@@ -390,22 +475,30 @@ class Network:
             for device_id in clock_devices:  # complete clock executions
                 if not self.execute_clock(device_id):
                     return False
+            for device_id in siggen_devices:  # complete siggen executions
+                if not self.execute_siggen(device_id):
+                    return False
+            for device_id in rc_devices:  # complete rc executions
+                if not self.execute_rc(device_id):
+                    return False
             for device_id in and_devices:  # execute AND gate devices
                 if not self.execute_gate(
-                        device_id, self.devices.HIGH, self.devices.HIGH
+                    device_id, self.devices.HIGH, self.devices.HIGH
                 ):
                     return False
             for device_id in or_devices:  # execute OR gate devices
-                if not self.execute_gate(device_id, self.devices.LOW, self.devices.LOW):
+                if not self.execute_gate(
+                    device_id, self.devices.LOW, self.devices.LOW
+                ):
                     return False
             for device_id in nand_devices:  # execute NAND gate devices
                 if not self.execute_gate(
-                        device_id, self.devices.HIGH, self.devices.LOW
+                    device_id, self.devices.HIGH, self.devices.LOW
                 ):
                     return False
             for device_id in nor_devices:  # execute NOR gate devices
                 if not self.execute_gate(
-                        device_id, self.devices.LOW, self.devices.HIGH
+                    device_id, self.devices.LOW, self.devices.HIGH
                 ):
                     return False
             for device_id in xor_devices:  # execute XOR devices

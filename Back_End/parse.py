@@ -60,7 +60,7 @@ class Parser:
             self.monitors.MONITOR_PRESENT: "Monitor already present.",
         }
 
-        self.current_module_name = None
+        self.current_module_name = None  # "Main"
 
         # dict of { module_name : [ [inputs],[outputs] ] }
         self.module_mappings = {}
@@ -282,7 +282,14 @@ class Parser:
     def parse_statement(self):
         # parse keywords
         if self.symbol.type == Symbol.KEYWORD:
-            if self.symbol.text in ["wire", "clock", "switch", "dtype"]:
+            if self.symbol.text in [
+                "wire",
+                "clock",
+                "siggen",
+                "rc",
+                "switch",
+                "dtype",
+            ]:
                 # create wire/clock/switch/dtype
                 self.parse_declaration()
             elif self.symbol.text == "monitor":
@@ -312,7 +319,7 @@ class Parser:
             self.error_count += 1
             self.next_symbol()
 
-    def _parse_device_thing(self, device_type: str) -> str | None:
+    def _parse_device(self, device_type: str) -> str | None:
         if self.symbol.type == Symbol.NAME:
             device_name = f"__{self.symbol.text}__{self.current_module_name}__"
             if self.names.query(
@@ -330,13 +337,13 @@ class Parser:
 
     def parse_declaration(self):
         if self.accept(Symbol.KEYWORD, "wire"):
-            wire_id = self._parse_device_thing("wire")
+            wire_id = self._parse_device("wire")
             if wire_id is not None:
                 self.devices.make_device(wire_id, self.devices.AND, 1)
             self.expect(Symbol.PUNCTUATION, ";")
 
         elif self.accept(Symbol.KEYWORD, "clock"):
-            clock_id = self._parse_device_thing("clock")
+            clock_id = self._parse_device("clock")
             if clock_id is not None:
                 self.expect(Symbol.PUNCTUATION, "[")
 
@@ -353,8 +360,53 @@ class Parser:
             self.expect(Symbol.PUNCTUATION, "]")
             self.expect(Symbol.PUNCTUATION, ";")
 
+        elif self.accept(Symbol.KEYWORD, "siggen"):
+            siggen_id = self._parse_device("siggen")
+            if siggen_id is not None:
+                self.expect(Symbol.PUNCTUATION, "=")
+                self.expect(Symbol.PUNCTUATION, "[")
+
+                signals = []
+                while self.symbol.type == Symbol.NUMBER:
+                    val = int(self.symbol.text)
+                    if val not in [0, 1]:
+                        self.errors.append(
+                            f"Semantic Error: SIGGEN accepts only 0 or 1, got {val}."
+                        )
+                        self.error_count += 1
+                    signals.append(val)
+                    self.next_symbol()
+                    if self.accept(Symbol.PUNCTUATION, ","):
+                        continue
+                    else:
+                        break
+
+                self.devices.make_device(
+                    siggen_id, self.devices.SIGGEN, signals
+                )
+            self.expect(Symbol.PUNCTUATION, "]")
+            self.expect(Symbol.PUNCTUATION, ";")
+
+        elif self.accept(Symbol.KEYWORD, "rc"):
+            rc_id = self._parse_device("rc")
+            if rc_id is not None:
+                self.expect(Symbol.PUNCTUATION, "[")
+
+                if self.symbol.type == Symbol.NUMBER:
+                    time_constant = int(self.symbol.text)
+                    self.next_symbol()
+                    self.devices.make_device(
+                        rc_id, self.devices.RC, time_constant
+                    )
+                else:
+                    self.expect(Symbol.NUMBER)
+                    return
+
+            self.expect(Symbol.PUNCTUATION, "]")
+            self.expect(Symbol.PUNCTUATION, ";")
+
         elif self.accept(Symbol.KEYWORD, "switch"):
-            switch_id = self._parse_device_thing("switch")
+            switch_id = self._parse_device("switch")
             if switch_id is not None:
                 self.expect(Symbol.PUNCTUATION, "=")
                 if self.symbol.type == Symbol.NUMBER and self.symbol.text in [
@@ -378,7 +430,7 @@ class Parser:
             self.expect(Symbol.PUNCTUATION, ";")
 
         elif self.accept(Symbol.KEYWORD, "dtype"):
-            dtype_id = self._parse_device_thing("dtype")
+            dtype_id = self._parse_device("dtype")
             if dtype_id is not None:
                 self.devices.make_device(dtype_id, self.devices.D_TYPE)
             self.expect(Symbol.PUNCTUATION, ";")

@@ -44,6 +44,10 @@ class Device:
         self.clock_counter = None
         self.switch_state = None
         self.dtype_memory = None
+        self.signal_generator_data = None
+        self.siggen_index = 0
+        self.rc_time_constant = None
+        self.rc_counter = None
 
 
 class Devices:
@@ -107,7 +111,13 @@ class Devices:
         self.devices_dict: dict[UUID, Device] = {}
 
         gate_strings: list[str] = ["AND", "OR", "NAND", "NOR", "XOR"]
-        device_strings: list[str] = ["CLOCK", "SWITCH", "DTYPE"]
+        device_strings: list[str] = [
+            "CLOCK",
+            "SWITCH",
+            "DTYPE",
+            "SIGGEN",
+            "RC",
+        ]
         dtype_inputs: list[str] = ["CLK", "SET", "CLEAR", "DATA"]
         dtype_outputs: list[str] = ["Q", "QBAR"]
 
@@ -134,9 +144,13 @@ class Devices:
             self.NOR,
             self.XOR,
         ] = self.names.lookup(gate_strings)
-        self.device_types = [self.CLOCK, self.SWITCH, self.D_TYPE] = (
-            self.names.lookup(device_strings)
-        )
+        self.device_types = [
+            self.CLOCK,
+            self.SWITCH,
+            self.D_TYPE,
+            self.SIGGEN,
+            self.RC,
+        ] = self.names.lookup(device_strings)
         self.dtype_input_ids = [
             self.CLK_ID,
             self.SET_ID,
@@ -261,6 +275,21 @@ class Devices:
         device.clock_half_period = clock_half_period
         self.cold_startup()  # clock initialised to a random point in its cycle
 
+    def make_signal_generator(self, device_id, signal_array):
+        """Make an arbitrary signal generator device with the specified sequence."""
+        self.add_device(device_id, self.SIGGEN)
+        device = self.get_device(device_id)
+        device.signal_generator_data = list(signal_array)
+        device.siggen_index = -1  # fixes initial off by one error
+        self.add_output(device_id, output_id=None, signal=signal_array[0])
+
+    def make_rc(self, device_id, rc_constant):
+        """Make a RC device with the specified constant."""
+        self.add_device(device_id, self.RC)
+        device = self.get_device(device_id)
+        device.rc_time_constant = rc_constant
+        self.cold_startup()
+
     def make_gate(self, device_id, device_kind, no_of_inputs: int):
         """Make logic gates with the specified number of inputs."""
         self.add_device(device_id, device_kind)
@@ -298,6 +327,12 @@ class Devices:
                 # Initialise it to a random point in its cycle.
                 device.clock_counter = random.randrange(
                     device.clock_half_period
+                )
+            # todo: siggen logic
+            elif device.device_kind == self.RC:
+                device.rc_counter = 0
+                self.add_output(
+                    device.device_id, output_id=None, signal=self.HIGH
                 )
 
     def make_device(self, device_id, device_kind, device_property=None):
@@ -352,6 +387,24 @@ class Devices:
                 error_type = self.QUALIFIER_PRESENT
             else:
                 self.make_d_type(device_id)
+                error_type = self.NO_ERROR
+
+        elif device_kind == self.SIGGEN:
+            if device_property is None:
+                error_type = self.NO_QUALIFIER
+            elif not isinstance(device_property, list):
+                error_type = self.INVALID_QUALIFIER
+            else:
+                self.make_signal_generator(device_id, device_property)
+                error_type = self.NO_ERROR
+
+        elif device_kind == self.RC:
+            if device_property is None:
+                error_type = self.NO_QUALIFIER
+            elif not isinstance(device_property, int) or device_property <= 0:
+                error_type = self.INVALID_QUALIFIER
+            else:
+                self.make_rc(device_id, device_property)
                 error_type = self.NO_ERROR
 
         else:
