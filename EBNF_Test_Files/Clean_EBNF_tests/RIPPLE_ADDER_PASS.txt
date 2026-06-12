@@ -35,3 +35,5 @@ module ripple_counter : -> ;
     monitor ff2.Q ;
 
 end ;
+
+ripple_counter();

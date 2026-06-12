@@ -22,3 +22,5 @@ module
     monitor wire_out_1 ;
  
 end ;
+
+clk_naming_test();

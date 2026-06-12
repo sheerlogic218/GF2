@@ -16,3 +16,7 @@ module dtype_full : -> ;
     monitor clk ;
  
 end ;
+
+
+
+dtype_full();

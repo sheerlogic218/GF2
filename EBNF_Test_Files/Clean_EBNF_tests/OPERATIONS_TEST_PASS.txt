@@ -23,3 +23,5 @@ module bool_ops : -> ;
     monitor out5 ;
  
 end ;
+
+bool_ops()

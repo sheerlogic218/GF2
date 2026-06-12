@@ -1,1 +1,3 @@
-module my_module : -> ; switch a = 0; switch b= 0; wire my_wire; my_wire = a+b; end;
+module my_module : -> ; switch a = 0; switch b= 0; wire my_wire; my_wire = a+b; monitor my_wire; end;
+
+my_module();

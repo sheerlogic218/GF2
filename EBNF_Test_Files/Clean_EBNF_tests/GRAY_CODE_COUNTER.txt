@@ -48,3 +48,5 @@ module gray_counter : -> ;
     monitor g0 ;
 
 end ;
+
+gray_counter();

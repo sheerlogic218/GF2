@@ -9,8 +9,11 @@ module top_module : -> out_sop, out_pos ;
     // product of sums expression
     out_pos = c * (b + !a) * (!b + !c + d) ;
 
-    // Simulation monitors
-    monitor out_sop ;
-    monitor out_pos ;
 
 end ;
+
+wire x;
+wire y;
+top_module(-> x,y);
+monitor x;
+monitor y;

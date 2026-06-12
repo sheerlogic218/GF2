@@ -1,12 +1,12 @@
-module my_module: -> applE;
+module my_module: -> ApplE ;
 	switch apple = 0;
 	switch applE = 0;
 	
-	applE = apple^applE;
+	ApplE = apple^applE;
 	
-	monitor applE;
+	monitor ApplE;
 
 end;
-	
-
+wire wire2;
+my_module(->wire2);
 	

@@ -14,13 +14,11 @@ module half_adder : C -> ;
 
 end ;
  
-module inverter : -> ;
 
-    switch X = 1 ;
-    wire out ;
+switch X = 1 ;
+wire out ;
 
-    out = !X ;
-    instance half_adder barry(X->);
-    monitor out ;
+out = !X ;
+half_adder barry(X->);
+monitor out ;
  
-end ;

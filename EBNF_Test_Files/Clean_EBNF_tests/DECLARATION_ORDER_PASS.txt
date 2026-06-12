@@ -9,3 +9,5 @@ module declaration_order : -> ;
 	wire meow;
 	
 end;
+
+declaration_order()
