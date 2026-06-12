@@ -141,9 +141,8 @@ class Parser:
                         unconnected.append(f"{dev_name}.{port_name}")
 
             if unconnected:
-                self.errors.append(
-                    f"Semantic Error: Unconnected inputs detected on: {', '.join(unconnected)}"
-                )
+                error_message = self._get_semantic_error() + f"Unconnected inputs detected on: {', '.join(unconnected)}"
+                self.errors.append(error_message)
                 self.error_count += 1
 
     def parse_network(self):
@@ -394,9 +393,8 @@ class Parser:
                 while self.symbol.type == Symbol.NUMBER:
                     val = int(self.symbol.text)
                     if val not in [0, 1]:
-                        self.errors.append(
-                            f"Semantic Error: SIGGEN accepts only 0 or 1, got {val}."
-                        )
+                        error_message = self._get_semantic_error() + f"SIGGEN accepts only 0 or 1, got {val}."
+                        self.errors.append(error_message)
                         self.error_count += 1
                     signals.append(val)
                     self.next_symbol()
@@ -582,9 +580,8 @@ class Parser:
                 src_dev, src_port, gate_id, input_port_id
             )
             if error != self.network.NO_ERROR:
-                self.errors.append(
-                    f"Semantic Error: Gate connection failed. E:{error}, {self.map_error_code[error]}"
-                )
+                error_message = self._get_semantic_error() + f"Gate connection failed. E:{error}, {self.map_error_code[error]}"
+                self.errors.append(error_message)
                 self.error_count += 1
 
         return gate_id, None
@@ -806,9 +803,8 @@ class Parser:
                 inst_out_id, None, caller_dev, caller_port
             )
             if error != self.network.NO_ERROR:
-                self.errors.append(
-                    f"Semantic Error: Instance output binding failed. E:{error}"
-                )
+                error_message = self._get_semantic_error() + f"Instance output binding failed. E:{error}"
+                self.errors.append(error_message)
                 self.error_count += 1
 
         # "playback" the saved symbols
